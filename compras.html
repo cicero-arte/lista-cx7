@@ -1,0 +1,1250 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Compras Casa</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://apis.google.com/js/api.js" async defer></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  input[type=number]::-webkit-outer-spin-button,
+  input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
+  input[type=number]{-moz-appearance:textfield;}
+  body.tema-dia{--bg:#f5f5f0;--bg2:#ffffff;--bg3:#ebebeb;--border:#ddd;--text:#1a1a1a;--text2:#444;--text3:#888;--card:#ffffff;--input:#f0f0ec;}
+  body.tema-noite{--bg:#0c0c0c;--bg2:#141414;--bg3:#1a1a1a;--border:#2a2a2a;--text:#e8e4dc;--text2:#aaa;--text3:#555;--card:#141414;--input:#1a1a1a;}
+  body.fz-pequeno{--fz:12px;--fz-sm:10px;--fz-xs:9px;--fz-lg:14px;--fz-xl:22px;}
+  body.fz-medio{--fz:14px;--fz-sm:12px;--fz-xs:11px;--fz-lg:16px;--fz-xl:24px;}
+  body.fz-grande{--fz:16px;--fz-sm:13px;--fz-xs:12px;--fz-lg:18px;--fz-xl:26px;}
+  body.fz-gg{--fz:19px;--fz-sm:16px;--fz-xs:14px;--fz-lg:21px;--fz-xl:29px;}
+  html,body{margin:0;padding:0;height:100%;background:#0c0c0c;color:#e8e4dc;font-family:'Courier New',monospace;}#root{height:100%;}
+  input,button,select{font-family:inherit;}
+  input[type=number]::-webkit-inner-spin-button,
+  input[type=number]::-webkit-outer-spin-button{opacity:1;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+  ::-webkit-scrollbar{width:4px;height:4px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+  ::-webkit-scrollbar-thumb{background:#2a2a2a;border-radius:2px;}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef } = React;
+
+const CATS_DEFAULT = {
+  hortifruti: { label: "Hortifruti", emoji: "🥦", cor: "#4ade80" },
+  carnes:     { label: "Carnes",     emoji: "🥩", cor: "#f87171" },
+  laticinios: { label: "Laticínios", emoji: "🧀", cor: "#fbbf24" },
+  mercearia:  { label: "Mercearia",  emoji: "🛒", cor: "#60a5fa" },
+  limpeza:    { label: "Limpeza",    emoji: "🧹", cor: "#a78bfa" },
+  higiene:    { label: "Higiene",    emoji: "🪥", cor: "#34d399" },
+  bebidas:    { label: "Bebidas",    emoji: "🧃", cor: "#fb923c" },
+  padaria:    { label: "Padaria",    emoji: "🍞", cor: "#e879f9" },
+  congelados: { label: "Congelados", emoji: "🧊", cor: "#38bdf8" },
+  outros:     { label: "Outros",     emoji: "📦", cor: "#94a3b8" },
+};
+// CATS is used globally; components receive it as prop or via useCats hook
+let CATS = {...CATS_DEFAULT};
+
+const DEFAULT_CONFIG = {
+  raio: 10, limite: 500, alertaPercent: 80,
+  sincEstoque: false, cidade: "Sobradinho, DF", apiKey: "", tema: "noite",
+  categorias: CATS_DEFAULT, fontSize: "medio",
+};
+
+const uid = (() => { let n = Date.now(); return () => String(++n); })();
+const fmt = (v) => Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const fmtDate = (d) => new Date(d).toLocaleString("pt-BR");
+
+const LS = {
+  get: (k, def) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : def; } catch { return def; } },
+  set: (k, v)  => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
+
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+// Log global de erros de busca — visível na tela
+const _errosLog = [];
+function addLog(msg){ _errosLog.push(msg); console.error("[busca]", msg); }
+
+async function buscarPrecoIA(produto, cidade, raio, apiKey, tentativa = 1) {
+  if (!apiKey || !apiKey.startsWith("sk-ant-")) {
+    addLog("Chave inválida: " + String(apiKey).slice(0,10));
+    return null;
+  }
+  const prompt = `Você é um pesquisador de preços de supermercado no Brasil.
+Responda SOMENTE com JSON válido, sem markdown, sem explicações.
+Produto: "${produto}" | Localização: ${cidade}.
+Retorne o preço médio praticado no varejo dessa região.
+Tente usar dados do bairro ou cidade informada. Se não tiver dados específicos, use a média do estado/UF.
+Se o produto não especificar marca, retorne a marca com MENOR preço médio na região.
+Se especificar marca, retorne o preço médio dessa marca na região.
+Formato: {"marca":"string","categoria":"hortifruti|carnes|laticinios|mercearia|limpeza|higiene|bebidas|padaria|congelados|outros","preco_unitario":number,"unidade":"string","referencia_preco":"bairro|cidade|estado"}`;
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true",
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 400,
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+    if (res.status === 429) {
+      addLog(`429 rate limit tentativa ${tentativa}`);
+      if (tentativa <= 3) { await sleep(3000 * tentativa); return buscarPrecoIA(produto, cidade, raio, apiKey, tentativa + 1); }
+      return null;
+    }
+    if (!res.ok) {
+      const errText = await res.text();
+      addLog(`HTTP ${res.status} para "${produto}": ${errText.slice(0,200)}`);
+      return null;
+    }
+    const data = await res.json();
+    if (data.error) {
+      addLog(`API error para "${produto}": ${JSON.stringify(data.error)}`);
+      return null;
+    }
+    const text = data.content?.find(b => b.type === "text")?.text || "";
+    if (!text) { addLog(`Resposta vazia para "${produto}"`); return null; }
+    const clean = text.replace(/\`\`\`json|\`\`\`/g, "").trim();
+    // Extrai o primeiro objeto JSON balanceado (evita erro com múltiplos objetos)
+    let jsonStr = null;
+    const start = clean.indexOf("{");
+    if (start !== -1) {
+      let depth = 0;
+      for (let i = start; i < clean.length; i++) {
+        if (clean[i] === "{") depth++;
+        else if (clean[i] === "}") { depth--; if (depth === 0) { jsonStr = clean.slice(start, i+1); break; } }
+      }
+    }
+    if (!jsonStr) {
+      addLog(`JSON não encontrado para "${produto}": ${clean.slice(0,100)}`);
+      if (tentativa <= 2) { await sleep(1000); return buscarPrecoIA(produto, cidade, raio, apiKey, tentativa + 1); }
+      return null;
+    }
+    const resultado = JSON.parse(jsonStr);
+    addLog(`OK: "${produto}" → ${resultado.preco_unitario} ${resultado.unidade||""} · ${resultado.marca||""} (ref: ${resultado.referencia_preco||"estado"})`);
+    return resultado;
+  } catch(e) {
+    addLog(`Exceção para "${produto}": ${e.message}`);
+    return null;
+  }
+}
+
+function printLista(itens, titulo, config) {
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${titulo}</title>
+<style>body{font-family:sans-serif;font-size:13px;padding:20px;color:#111;}
+h1{font-size:18px;border-bottom:2px solid #333;padding-bottom:8px;}
+.meta{font-size:11px;color:#666;margin-bottom:16px;}
+table{width:100%;border-collapse:collapse;}
+th{background:#333;color:#fff;padding:6px 8px;text-align:left;font-size:11px;}
+td{padding:5px 8px;border-bottom:1px solid #eee;font-size:12px;}
+tr:nth-child(even) td{background:#f9f9f9;}
+.total{font-weight:bold;text-align:right;margin-top:12px;font-size:14px;}
+@media print{body{padding:0;}}</style></head><body>
+<h1>${titulo}</h1>
+<div class="meta">Gerado em: ${fmtDate(Date.now())} · ${config.cidade} · ${config.raio}km</div>
+<table><thead><tr><th>#</th><th>Produto</th><th>Marca</th><th>Cat.</th><th>Qtd</th><th>Un</th><th>Preço</th><th>Subtotal</th></tr></thead>
+<tbody>${itens.map((it,i)=>`<tr><td>${i+1}</td><td>${it.nome}</td><td>${it.marca||"—"}</td>
+<td>${CATS[it.categoria]?.label||it.categoria}</td><td>${it.qtd}</td><td>${it.unidade||"un"}</td>
+<td>${it.preco?fmt(it.preco):"—"}</td><td>${it.preco?fmt(it.preco*it.qtd):"—"}</td>
+</tr>`).join("")}</tbody></table>
+<div class="total">Total: ${fmt(itens.filter(i=>i.preco).reduce((a,i)=>a+i.preco*i.qtd,0))}</div>
+</body></html>`;
+  const w = window.open("","_blank");
+  if(w){w.document.write(html);w.document.close();setTimeout(()=>w.print(),600);}
+}
+
+// ── SMALL COMPONENTS ──
+const Chip = ({label,ativo,cor,onClick}) => (
+  <button onClick={onClick} style={{padding:"5px 11px",borderRadius:20,fontSize:"var(--fz-sm)",whiteSpace:"nowrap",
+    border:`1px solid ${ativo?cor:"#2a2a2a"}`,background:ativo?cor+"28":"transparent",
+    color:ativo?cor:"var(--text3)",cursor:"pointer",fontFamily:"inherit"}}>
+    {label}
+  </button>
+);
+
+const Modal = ({onClose,title,children}) => (
+  <div style={{position:"fixed",inset:0,background:"#000a",zIndex:100,display:"flex",alignItems:"flex-end"}}
+    onClick={onClose}>
+    <div style={{background:"var(--bg2)",borderRadius:"16px 16px 0 0",width:"100%",maxHeight:"85vh",
+      overflowY:"auto",padding:"20px 20px 40px",border:"1px solid var(--border)"}}
+      onClick={e=>e.stopPropagation()}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+        <div style={{fontSize:"var(--fz-lg)",fontWeight:700}}>{title}</div>
+        <button onClick={onClose} style={{background:"none",border:"none",color:"var(--text3)",fontSize:"var(--fz-xl)",cursor:"pointer"}}>×</button>
+      </div>
+      {children}
+    </div>
+  </div>
+);
+
+const Inp = ({label,value,onChange,placeholder,type="text",...rest}) => (
+  <div style={{marginBottom:12}}>
+    {label&&<div style={{fontSize:"var(--fz-xs)",color:"var(--text3)",letterSpacing:2,textTransform:"uppercase",marginBottom:5}}>{label}</div>}
+    <input value={value} onChange={onChange} placeholder={placeholder} type={type} {...rest}
+      style={{width:"100%",background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:8,
+        padding:"10px 12px",color:"var(--text)",fontSize:"var(--fz)",outline:"none",boxSizing:"border-box",
+        fontFamily:"inherit",...(rest.style||{})}}/>
+  </div>
+);
+
+const Toggle = ({value,onChange,label}) => (
+  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+    <span style={{fontSize:"var(--fz)",color:"#ccc"}}>{label}</span>
+    <div onClick={()=>onChange(!value)} style={{width:44,height:24,borderRadius:12,cursor:"pointer",
+      background:value?"#fbbf24":"#2a2a2a",position:"relative",transition:"background .2s"}}>
+      <div style={{position:"absolute",top:3,left:value?23:3,width:18,height:18,borderRadius:9,
+        background:"#fff",transition:"left .2s"}}/>
+    </div>
+  </div>
+);
+
+const Section = ({title,children}) => (
+  <div style={{marginBottom:24}}>
+    <div style={{fontSize:"var(--fz-sm)",color:"var(--text2)",fontWeight:700,letterSpacing:1,marginBottom:12,textTransform:"uppercase"}}>{title}</div>
+    {children}
+  </div>
+);
+
+const SectionHead = ({label,right}) => (
+  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",
+    padding:"14px 0 6px",borderTop:"1px solid #1e1e1e",marginTop:6}}>
+    <span style={{fontSize:"var(--fz-xs)",color:"var(--text3)",letterSpacing:2,textTransform:"uppercase"}}>{label}</span>
+    {right}
+  </div>
+);
+
+const Empty = ({aba}) => (
+  <div style={{textAlign:"center",padding:"48px 20px",color:"#2a2a2a"}}>
+    <div style={{fontSize:40,marginBottom:12}}></div>
+    <div style={{fontSize:"var(--fz)"}}>{aba==="compras"?"Lista vazia":"Estoque vazio"}</div>
+    <div style={{fontSize:"var(--fz-sm)",marginTop:6}}>Toque em + para adicionar</div>
+  </div>
+);
+
+const btnPri = {width:"100%",padding:"12px",background:"#fbbf24",border:"none",borderRadius:8,
+  color:"#0c0c0c",fontWeight:700,fontSize:"var(--fz)",cursor:"pointer",letterSpacing:1,
+  textTransform:"uppercase",fontFamily:"inherit",display:"block"};
+const btnSec = {width:"100%",padding:"10px",background:"none",border:"1px solid var(--border)",
+  borderRadius:8,color:"var(--text2)",fontSize:"var(--fz-sm)",cursor:"pointer",fontFamily:"inherit",
+  letterSpacing:1,display:"block",boxSizing:"border-box"};
+const iconBtn = {background:"none",border:"none",color:"var(--text3)",fontSize:"var(--fz-xl)",cursor:"pointer",padding:"4px",fontFamily:"inherit"};
+
+// ── ITEM CARD ──
+function ItemCard({item,aba,onToggle,onRemove,onOpen,onQtdChange,onQtdEstoqueChange}) {
+  const cat = CATS[item.categoria]||CATS.outros;
+  const subtotal = item.preco ? item.preco*item.qtd : null;
+  const [qtdLocal,setQtdLocal] = useState(String(item.qtd));
+  const qtdEst = item.qtdEstoque??0;
+  const handleQtd = (v) => { setQtdLocal(v); const n=parseFloat(v); if(!isNaN(n)&&n>0) onQtdChange(n); };
+  const dec = () => onQtdEstoqueChange(Math.max(0,qtdEst-1));
+  const inc = () => onQtdEstoqueChange(qtdEst+1);
+  const isComprado = aba==="compras" && item.comprado;
+
+  return (
+    <div style={{padding:"10px 8px",borderBottom:"1px solid var(--border)",
+      background: isComprado ? "#4ade8011" : "transparent",
+      borderLeft: isComprado ? "3px solid #4ade80" : "3px solid transparent",
+      transition:"background .2s"}}>
+      <div style={{display:"flex",alignItems:"center",gap:10}}>
+        {aba==="compras" ? (
+          <button onClick={onToggle} style={{width:24,height:24,borderRadius:7,flexShrink:0,
+            border:`2px solid ${item.comprado?"#4ade80":"#2a2a2a"}`,
+            background:item.comprado?"#4ade8022":"transparent",cursor:"pointer",
+            display:"flex",alignItems:"center",justifyContent:"center",
+            color:"#4ade80",fontSize:"var(--fz-sm)",fontFamily:"inherit"}}>
+            {item.comprado?"✓":""}
+          </button>
+        ) : (
+          <div style={{width:24,height:24,borderRadius:7,flexShrink:0,
+            background:cat.cor+"22",border:`2px solid ${cat.cor}66`}}></div>
+        )}
+
+        <div style={{flex:1,minWidth:0,cursor:"pointer"}} onClick={onOpen}>
+          <div style={{fontSize:"var(--fz)",
+            color: isComprado ? "#4ade80" : "var(--text)",
+            whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+            {item.nome}
+            {item.marca?<span style={{fontSize:"var(--fz-sm)",opacity:.7}}> · {item.marca}</span>:null}
+          </div>
+          {aba==="compras" && (
+            <div style={{fontSize:"var(--fz-sm)",marginTop:2,display:"flex",gap:6,flexWrap:"wrap"}}>
+              {subtotal&&(
+                <span style={{color: isComprado ? "#4ade8099" : "#fbbf2488"}}>
+                  {fmt(item.preco)}/un · <strong style={{color: isComprado ? "#4ade80" : "#fbbf24"}}>{fmt(subtotal)}</strong>
+                  {!isComprado&&item.referencia_preco&&(
+                    <span style={{color:"var(--text3)",marginLeft:4}}>
+                      (est. {item.referencia_preco})
+                    </span>
+                  )}
+                </span>
+              )}
+              {!item.preco&&<span style={{color:"var(--text3)"}}>— sem preço estimado</span>}
+            </div>
+          )}
+          {aba==="estoque" && (
+            <div style={{fontSize:"var(--fz-sm)",color:qtdEst===0?"#f87171":"#4ade8066",marginTop:1}}>
+              {qtdEst===0?"⚠ zerado":(CATS[item.categoria]?.label||"outros")}
+            </div>
+          )}
+        </div>
+
+        {aba==="compras" ? (
+          <input value={qtdLocal} onChange={e=>handleQtd(e.target.value)}
+            type="number" min="0.1" step="0.1"
+            style={{width:44,background:"var(--input)",border:"1px solid var(--border)",borderRadius:6,
+              padding:"4px",color:"var(--text)",fontSize:"var(--fz-sm)",outline:"none",textAlign:"center",
+              fontFamily:"inherit",MozAppearance:"textfield",WebkitAppearance:"none"}}/>
+        ) : (
+          <div style={{display:"flex",alignItems:"center",flexShrink:0}}>
+            <button onClick={dec} style={{width:30,height:30,borderRadius:"6px 0 0 6px",
+              background:"var(--bg3)",border:"1px solid var(--border)",borderRight:"none",
+              color:"var(--text)",fontSize:"var(--fz-xl)",cursor:"pointer",fontFamily:"inherit",
+              display:"flex",alignItems:"center",justifyContent:"center"}}>−</button>
+            <div style={{width:32,height:30,background:"var(--input)",border:"1px solid var(--border)",
+              display:"flex",alignItems:"center",justifyContent:"center",fontSize:"var(--fz)",fontWeight:700,
+              color:qtdEst===0?"#f87171":"#4ade80"}}>{qtdEst}</div>
+            <button onClick={inc} style={{width:30,height:30,borderRadius:"0 6px 6px 0",
+              background:"var(--bg3)",border:"1px solid var(--border)",borderLeft:"none",
+              color:"var(--text)",fontSize:"var(--fz-xl)",cursor:"pointer",fontFamily:"inherit",
+              display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
+          </div>
+        )}
+
+        <button onClick={onRemove} style={{background:"none",border:"none",color:"#2a2a2a",
+          cursor:"pointer",fontSize:"var(--fz-xl)",padding:"0 2px",flexShrink:0,fontFamily:"inherit"}}
+          onTouchStart={e=>e.currentTarget.style.color="#f87171"}
+          onTouchEnd={e=>e.currentTarget.style.color="#2a2a2a"}
+          onMouseEnter={e=>e.currentTarget.style.color="#f87171"}
+          onMouseLeave={e=>e.currentTarget.style.color="#2a2a2a"}>×</button>
+      </div>
+    </div>
+  );
+}
+
+// ── DETALHE MODAL ──
+function DetalheModal({item,onClose,onUpdate,config}) {
+  const [local,setLocal] = useState({...item});
+  const save = (patch) => { setLocal(l=>({...l,...patch})); onUpdate(patch); };
+  const isEstoque = item._lista==="estoque";
+
+
+  return (
+    <Modal onClose={onClose} title={local.nome}>
+      <div style={{marginBottom:12}}>
+        <div style={{fontSize:"var(--fz-xs)",color:"var(--text3)",letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Categoria</div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:12}}>
+          {Object.entries(CATS).map(([key,cat])=>(
+            <Chip key={key} label={cat.label} ativo={local.categoria===key} cor={cat.cor}
+              onClick={()=>save({categoria:key})}/>
+          ))}
+        </div>
+      </div>
+
+      {isEstoque && (
+        <>
+          <div style={{marginBottom:12}}>
+            <div style={{fontSize:"var(--fz-xs)",color:"var(--text3)",letterSpacing:2,textTransform:"uppercase",marginBottom:3}}>Nome</div>
+            <input value={local.nome||""} onChange={e=>save({nome:e.target.value})}
+              style={{width:"100%",background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:6,
+                padding:"7px 10px",color:"var(--text)",fontSize:"var(--fz)",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+          </div>
+          <div style={{background:"var(--bg3)",borderRadius:8,padding:"14px",marginBottom:14,border:"1px solid var(--border)"}}>
+            <div style={{fontSize:"var(--fz-xs)",color:"var(--text3)",letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Quantidade em estoque</div>
+            <div style={{display:"flex",alignItems:"center",gap:12}}>
+              <button onClick={()=>save({qtdEstoque:Math.max(0,(local.qtdEstoque||0)-1)})}
+                style={{width:36,height:36,borderRadius:8,background:"var(--border)",border:"none",color:"var(--text)",fontSize:"var(--fz-xl)",cursor:"pointer",fontFamily:"inherit"}}>−</button>
+              <input value={local.qtdEstoque??0} type="number" min="0"
+                onChange={e=>save({qtdEstoque:parseFloat(e.target.value)||0})}
+                style={{flex:1,background:"var(--input)",border:"1px solid #333",borderRadius:8,padding:"10px",
+                  color:"#fbbf24",fontSize:"var(--fz-xl)",fontWeight:700,outline:"none",textAlign:"center",fontFamily:"inherit"}}/>
+              <button onClick={()=>save({qtdEstoque:(local.qtdEstoque||0)+1})}
+                style={{width:36,height:36,borderRadius:8,background:"var(--border)",border:"none",color:"var(--text)",fontSize:"var(--fz-xl)",cursor:"pointer",fontFamily:"inherit"}}>+</button>
+            </div>
+            <div style={{fontSize:"var(--fz-xs)",color:local.qtdEstoque===0?"#f87171":"#4ade80",marginTop:8,textAlign:"center"}}>
+              {local.qtdEstoque===0?"⚠ Zerado — entrará na lista de compras":"✓ Em estoque"}
+            </div>
+          </div>
+        </>
+      )}
+
+      {!isEstoque && (
+        <>
+          <div style={{marginBottom:12}}>
+            <div style={{fontSize:"var(--fz-xs)",color:"var(--text3)",letterSpacing:2,textTransform:"uppercase",marginBottom:3}}>Nome</div>
+            <input value={local.nome||""} onChange={e=>save({nome:e.target.value})}
+              style={{width:"100%",background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:6,
+                padding:"7px 10px",color:"var(--text)",fontSize:"var(--fz)",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
+            {[["Marca","marca",local.marca],["Unidade","unidade",local.unidade],
+              ["Preço unit. (R$)","preco",local.preco]
+            ].map(([label,key,val])=>(
+              <div key={key}>
+                <div style={{fontSize:"var(--fz-xs)",color:"var(--text3)",letterSpacing:2,textTransform:"uppercase",marginBottom:3}}>{label}</div>
+                <input value={val||""} onChange={e=>save({[key]:key==="preco"?parseFloat(e.target.value)||null:e.target.value})}
+                  style={{width:"100%",background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:6,
+                    padding:"7px 10px",color:"var(--text)",fontSize:"var(--fz)",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+              </div>
+            ))}
+          </div>
+
+          {local.preco&&(
+            <div style={{background:"var(--bg3)",borderRadius:8,padding:"10px 14px",marginBottom:14}}>
+              <div style={{fontSize:"var(--fz-sm)",color:"var(--text3)"}}>Subtotal</div>
+              <div style={{fontSize:"var(--fz-xl)",fontWeight:700,color:"#fbbf24"}}>{fmt(local.preco*local.qtd)}</div>
+              <div style={{fontSize:"var(--fz-xs)",color:"var(--text3)"}}>{local.qtd} × {fmt(local.preco)}</div>
+            </div>
+          )}
+
+        </>
+      )}
+    </Modal>
+  );
+}
+
+// ── CONFIG PANE ──
+function ConfigPane({config,setConfig,onSincChange,onClearCompras,onClearEstoque,onBackup,onRestore,onPrintCompras,onPrintEstoque,driveConectado,onConectarDrive,onSincronizarDrive}) {
+  const upd = (k,v) => setConfig(c=>({...c,[k]:v}));
+  const [conf,setConf] = useState(null);
+  return (
+    <div style={{padding:"16px 16px 100px",overflowY:"auto"}}>
+      <Section title="Localização e raio">
+        <Inp label="Cidade / região" value={config.cidade} onChange={e=>upd("cidade",e.target.value)}/>
+        <div style={{marginBottom:12}}>
+          <div style={{fontSize:"var(--fz-xs)",color:"var(--text3)",letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>
+            Raio de busca: <span style={{color:"#fbbf24"}}>{config.raio} km</span>
+          </div>
+          <input type="range" min={1} max={50} value={config.raio} onChange={e=>upd("raio",+e.target.value)}
+            style={{width:"100%",accentColor:"#fbbf24"}}/>
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:"var(--fz-xs)",color:"var(--text3)"}}>
+            <span>1 km</span><span>50 km</span>
+          </div>
+        </div>
+      </Section>
+
+      <Section title="Orçamento">
+        <Inp label="Limite de gasto (R$)" value={config.limite} type="number" onChange={e=>upd("limite",+e.target.value)}/>
+        <div style={{marginBottom:12}}>
+          <div style={{fontSize:"var(--fz-xs)",color:"var(--text3)",letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>
+            Alertar em: <span style={{color:"#fbbf24"}}>{config.alertaPercent}%</span> do limite
+          </div>
+          <input type="range" min={50} max={100} value={config.alertaPercent}
+            onChange={e=>upd("alertaPercent",+e.target.value)} style={{width:"100%",accentColor:"#fbbf24"}}/>
+        </div>
+      </Section>
+
+      <Section title="Aparência">
+        <Toggle value={config.tema==="dia"} onChange={v=>upd("tema",v?"dia":"noite")}
+          label={config.tema==="dia" ? "☀ Tema Dia (fundo claro)" : "🌙 Tema Noite (fundo escuro)"}/>
+        <div style={{marginTop:12}}>
+          <div style={{fontSize:"var(--fz-xs)",color:"var(--text3)",letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>
+            Tamanho das letras
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            {[["pequeno","P"],["medio","M"],["grande","G"],["gg","GG"]].map(([val,label])=>(
+              <button key={val} onClick={()=>upd("fontSize",val)} style={{
+                flex:1, padding:"10px 0", borderRadius:8, cursor:"pointer",
+                fontFamily:"inherit", fontWeight:700,
+                fontSize: val==="pequeno"?12:val==="medio"?14:val==="grande"?16:19,
+                background: (config.fontSize||"medio")===val ? "#fbbf2422" : "var(--bg3)",
+                border: `1px solid ${(config.fontSize||"medio")===val ? "#fbbf24" : "var(--border)"}`,
+                color: (config.fontSize||"medio")===val ? "#fbbf24" : "var(--text3)",
+              }}>{label}</button>
+            ))}
+          </div>
+        </div>
+      </Section>
+
+      <Section title="Integração Estoque">
+        <Toggle value={config.sincEstoque} onChange={onSincChange} label="Estoque interfere na lista de compras"/>
+        <p style={{fontSize:"var(--fz-sm)",color:"var(--text3)",marginTop:-6,marginBottom:0,lineHeight:1.6}}>
+          Itens zerados no estoque entram automaticamente na lista de compras.
+        </p>
+      </Section>
+
+      <Section title="Pesquisa de preços (IA)">
+        <div style={{marginBottom:10}}>
+          <div style={{fontSize:"var(--fz-xs)",color:"var(--text3)",letterSpacing:2,textTransform:"uppercase",marginBottom:5}}>Chave API Anthropic</div>
+          <input type="password" value={config.apiKey||""} onChange={e=>upd("apiKey",e.target.value)}
+            placeholder="sk-ant-api03-..."
+            style={{width:"100%",background:"var(--bg3)",
+              border:`1px solid ${config.apiKey?.startsWith("sk-ant-")?"#4ade8044":"#2a2a2a"}`,
+              borderRadius:8,padding:"10px 12px",color:"var(--text)",fontSize:"var(--fz)",outline:"none",
+              boxSizing:"border-box",fontFamily:"inherit"}}/>
+        </div>
+        <div style={{fontSize:"var(--fz-sm)",color:"var(--text3)",lineHeight:1.7,marginBottom:6}}>
+          {config.apiKey?.startsWith("sk-ant-")
+            ? <span style={{color:"#4ade80"}}>✓ Chave configurada — pesquisa ativa</span>
+            : <span>Sem chave a pesquisa fica desativada. Obtenha em console.anthropic.com</span>
+          }
+        </div>
+        <p style={{fontSize:"var(--fz-xs)",color:"var(--text3)",lineHeight:1.6,margin:0}}>
+          A chave fica salva só neste dispositivo.
+        </p>
+      </Section>
+
+      <Section title="Dados">
+        {conf==="compras" ? (
+          <div style={{background:"#1a0a0a",border:"1px solid #f8717140",borderRadius:8,padding:"12px",marginBottom:8}}>
+            <div style={{fontSize:"var(--fz-sm)",color:"#f87171",marginBottom:10}}>Apagar toda a lista de compras?</div>
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={()=>{onClearCompras();setConf(null);}} style={{flex:1,padding:"8px",background:"#f87171",border:"none",borderRadius:6,color:"#0c0c0c",fontWeight:700,fontSize:"var(--fz-sm)",cursor:"pointer",fontFamily:"inherit"}}>Sim, apagar</button>
+              <button onClick={()=>setConf(null)} style={{flex:1,padding:"8px",background:"var(--border)",border:"none",borderRadius:6,color:"var(--text)",fontSize:"var(--fz-sm)",cursor:"pointer",fontFamily:"inherit"}}>Cancelar</button>
+            </div>
+          </div>
+        ) : (
+          <button onClick={()=>setConf("compras")} style={{...btnSec,color:"#f87171",borderColor:"#f8717140",marginBottom:8}}>
+            Limpar lista de compras
+          </button>
+        )}
+        {conf==="estoque" ? (
+          <div style={{background:"#1a0a0a",border:"1px solid #f8717140",borderRadius:8,padding:"12px"}}>
+            <div style={{fontSize:"var(--fz-sm)",color:"#f87171",marginBottom:10}}>Apagar todo o estoque?</div>
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={()=>{onClearEstoque();setConf(null);}} style={{flex:1,padding:"8px",background:"#f87171",border:"none",borderRadius:6,color:"#0c0c0c",fontWeight:700,fontSize:"var(--fz-sm)",cursor:"pointer",fontFamily:"inherit"}}>Sim, apagar</button>
+              <button onClick={()=>setConf(null)} style={{flex:1,padding:"8px",background:"var(--border)",border:"none",borderRadius:6,color:"var(--text)",fontSize:"var(--fz-sm)",cursor:"pointer",fontFamily:"inherit"}}>Cancelar</button>
+            </div>
+          </div>
+        ) : (
+          <button onClick={()=>setConf("estoque")} style={{...btnSec,color:"#f87171",borderColor:"#f8717140"}}>
+            Limpar estoque
+          </button>
+        )}
+      </Section>
+
+      <Section title="Sincronização Google Drive">
+        <div style={{background:"var(--bg2)",borderRadius:8,padding:"12px",border:"1px solid var(--border)",marginBottom:10}}>
+          <div style={{fontSize:"var(--fz-sm)",color:"var(--text)",marginBottom:6}}>
+            {driveConectado ? "✓ Conectado ao Google Drive" : "Sincronize a lista entre seus dispositivos via Google Drive."}
+          </div>
+          <div style={{fontSize:"var(--fz-xs)",color:"var(--text3)",marginBottom:10,lineHeight:1.6}}>
+            {driveConectado
+              ? "Os dados são salvos automaticamente. Use o mesmo app em outro dispositivo e conecte para sincronizar."
+              : "Ao conectar, os dados do Drive serão carregados e qualquer alteração será salva automaticamente."}
+          </div>
+          {!driveConectado ? (
+            <button onClick={onConectarDrive} style={{...btnSec,color:"#60a5fa",borderColor:"#60a5fa44"}}>
+              Conectar ao Google Drive
+            </button>
+          ) : (
+            <button onClick={onSincronizarDrive} style={{...btnSec,color:"#4ade80",borderColor:"#4ade8044"}}>
+              Sincronizar agora
+            </button>
+          )}
+        </div>
+      </Section>
+
+      <Section title="Backup e Restauração">
+        <button onClick={onBackup} style={{...btnSec,marginBottom:8}}>
+          Exportar backup ({new Date().toLocaleDateString("pt-BR")})
+        </button>
+        <label style={{...btnSec,display:"block",textAlign:"center",cursor:"pointer",marginBottom:8}}>
+          Importar backup
+          <input type="file" accept=".json" onChange={onRestore} style={{display:"none"}}/>
+        </label>
+        <button onClick={onPrintCompras} style={{...btnSec,marginBottom:8}}>Imprimir lista de compras</button>
+        <button onClick={onPrintEstoque} style={btnSec}>Imprimir estoque</button>
+      </Section>
+
+      <Section title="Categorias">
+        <CatEditor cats={config.categorias||CATS_DEFAULT} onChange={v=>upd("categorias",v)}/>
+      </Section>
+    </div>
+  );
+}
+
+// ── CATEGORY EDITOR ──
+const CORES_OPCOES = ["#4ade80","#f87171","#fbbf24","#60a5fa","#a78bfa","#34d399","#fb923c","#e879f9","#38bdf8","#94a3b8","#f472b6","#facc15","#2dd4bf","#818cf8"];
+
+function CatEditor({cats,onChange}) {
+  const [editKey,setEditKey] = useState(null);
+  const [editData,setEditData] = useState({});
+  const [novaLabel,setNovaLabel] = useState("");
+
+  const abrirEdicao = (key) => {
+    setEditKey(key); setEditData({...cats[key]});
+  };
+  const salvarEdicao = () => {
+    if(!editData.label?.trim()) return;
+    onChange({...cats,[editKey]:{...cats[editKey],...editData}});
+    setEditKey(null);
+  };
+  const excluir = (key) => {
+    const novo={...cats}; delete novo[key]; onChange(novo);
+    setEditKey(null);
+  };
+  const adicionar = () => {
+    if(!novaLabel.trim()) return;
+    const key = novaLabel.toLowerCase().replace(/\s+/g,"_").replace(/[^a-z0-9_]/g,"") + "_" + Date.now();
+    const cores = CORES_OPCOES;
+    const cor = cores[Object.keys(cats).length % cores.length];
+    onChange({...cats,[key]:{label:novaLabel.trim(),emoji:novaEmoji,cor}});
+    setNovaLabel("");
+  };
+
+  return (
+    <div>
+      {Object.entries(cats).map(([key,cat])=>(
+        <div key={key}>
+          {editKey===key ? (
+            <div style={{background:"var(--bg2)",border:"1px solid var(--border)",borderRadius:8,padding:"10px",marginBottom:8}}>
+              <div style={{display:"flex",gap:8,marginBottom:8}}>
+                <input value={editData.label||""} onChange={e=>setEditData(d=>({...d,label:e.target.value}))}
+                  placeholder="Nome da categoria"
+                  style={{flex:1,background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:6,
+                    padding:"8px 10px",color:"var(--text)",fontSize:"var(--fz)",outline:"none",fontFamily:"inherit"}}/>
+              </div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
+                {CORES_OPCOES.map(c=>(
+                  <div key={c} onClick={()=>setEditData(d=>({...d,cor:c}))}
+                    style={{width:22,height:22,borderRadius:11,background:c,cursor:"pointer",
+                      border:editData.cor===c?"3px solid var(--text)":"3px solid transparent"}}/>
+                ))}
+              </div>
+              <div style={{display:"flex",gap:6}}>
+                <button onClick={salvarEdicao} style={{flex:1,padding:"7px",background:"#fbbf24",border:"none",
+                  borderRadius:6,color:"#0c0c0c",fontWeight:700,fontSize:"var(--fz-sm)",cursor:"pointer",fontFamily:"inherit"}}>✓ Salvar</button>
+                <button onClick={()=>setEditKey(null)} style={{padding:"7px 10px",background:"var(--bg3)",border:"none",
+                  borderRadius:6,color:"var(--text)",fontSize:"var(--fz-sm)",cursor:"pointer",fontFamily:"inherit"}}>✕</button>
+                <button onClick={()=>excluir(key)} style={{padding:"7px 10px",background:"none",border:"1px solid #f8717140",
+                  borderRadius:6,color:"#f87171",fontSize:"var(--fz-sm)",cursor:"pointer",fontFamily:"inherit"}}>🗑</button>
+              </div>
+            </div>
+          ) : (
+            <div onClick={()=>abrirEdicao(key)}
+              style={{display:"flex",alignItems:"center",gap:10,padding:"9px 10px",marginBottom:6,
+                background:"var(--bg2)",borderRadius:8,border:"1px solid var(--border)",cursor:"pointer"}}>
+              <div style={{width:12,height:12,borderRadius:6,background:cat.cor,flexShrink:0}}/>
+              <span style={{flex:1,fontSize:"var(--fz)",color:"var(--text)"}}>{cat.label}</span>
+              <span style={{color:"var(--text3)",fontSize:"var(--fz-sm)"}}>✎</span>
+            </div>
+          )}
+        </div>
+      ))}
+
+      {/* Nova categoria */}
+      <div style={{marginTop:10,background:"var(--bg2)",border:"1px dashed var(--border)",borderRadius:8,padding:"10px"}}>
+        <div style={{fontSize:"var(--fz-xs)",color:"var(--text3)",letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Nova categoria</div>
+        <div style={{display:"flex",gap:8,marginBottom:8}}>
+          <input value={novaLabel} onChange={e=>setNovaLabel(e.target.value)} placeholder="Nome da categoria"
+            style={{flex:1,background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:6,
+              padding:"8px 10px",color:"var(--text)",fontSize:"var(--fz)",outline:"none",fontFamily:"inherit"}}/>
+        </div>
+        <button onClick={adicionar} disabled={!novaLabel.trim()} style={{
+          width:"100%",padding:"8px",background:novaLabel.trim()?"#fbbf24":"var(--bg3)",
+          border:"none",borderRadius:6,color:novaLabel.trim()?"#0c0c0c":"var(--text3)",
+          fontWeight:700,fontSize:"var(--fz-sm)",cursor:novaLabel.trim()?"pointer":"default",fontFamily:"inherit"}}>
+          + Adicionar categoria
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── RODAPÉ ──
+function Rodape({compras,config,onPrint,onBuscar,buscando,buscandoNome,onVerLog,onEnviarEstoque}) {
+  const estimativaTotal = compras.filter(i=>i.preco).reduce((a,i)=>a+i.preco*i.qtd,0);
+  const estimativaComprados = compras.filter(i=>i.comprado&&i.preco).reduce((a,i)=>a+i.preco*i.qtd,0);
+  const realComprados = compras.filter(i=>i.comprado&&i.preco).reduce((a,i)=>a+i.preco*i.qtd,0);
+  const pendentes = compras.filter(i=>!i.comprado).length;
+  const nComprados = compras.filter(i=>i.comprado).length;
+  return (
+    <div style={{padding:"12px 16px 0"}}>
+      <div style={{background:"var(--bg2)",borderRadius:12,padding:"14px",border:"1px solid var(--border)",marginBottom:10}}>
+        {/* Linha de estimativa total */}
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:8,paddingBottom:8,borderBottom:"1px solid var(--border)"}}>
+          <span style={{fontSize:"var(--fz-sm)",color:"var(--text3)"}}>Estimativa total</span>
+          <span style={{fontSize:"var(--fz-lg)",fontWeight:700}}>{fmt(estimativaTotal)}</span>
+        </div>
+        {/* Comprados: real vs estimativa */}
+        {nComprados>0&&(
+          <div style={{marginBottom:8,paddingBottom:8,borderBottom:"1px solid var(--border)"}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+              <span style={{fontSize:"var(--fz-sm)",color:"#4ade80"}}>Comprado ({nComprados} itens)</span>
+              <span style={{fontSize:"var(--fz)",fontWeight:700,color:"#4ade80"}}>{fmt(realComprados)}</span>
+            </div>
+            <div style={{display:"flex",justifyContent:"space-between"}}>
+              <span style={{fontSize:"var(--fz-xs)",color:"var(--text3)"}}>Estimativa dos comprados</span>
+              <span style={{fontSize:"var(--fz-xs)",color:"var(--text3)"}}>{fmt(estimativaComprados)}</span>
+            </div>
+          </div>
+        )}
+        {/* Pendentes */}
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:config.limite>0?6:0}}>
+          <span style={{fontSize:"var(--fz-sm)",color:"#fbbf24"}}>{pendentes} itens pendentes</span>
+          <span style={{fontSize:"var(--fz-sm)",color:"#fbbf24"}}>{fmt(estimativaTotal-estimativaComprados)}</span>
+        </div>
+        {config.limite>0&&(
+          <div style={{fontSize:"var(--fz-xs)",color:"var(--text3)",textAlign:"right"}}>
+            limite: {fmt(config.limite)} ({Math.round((estimativaTotal/config.limite)*100)}%)
+          </div>
+        )}
+      </div>
+      <button onClick={onBuscar} disabled={buscando} style={{
+        ...btnSec, marginBottom:8,
+        color: buscando ? "var(--text3)" : "#fbbf24",
+        borderColor: buscando ? "var(--border)" : "#fbbf2466",
+      }}>
+        {buscando ? `Buscando ${buscandoNome||"..."}` : "Pesquisar preços"}
+      </button>
+      <button onClick={onVerLog} style={{...btnSec,marginBottom:8,fontSize:"var(--fz-sm)",color:"var(--text3)"}}>
+        Ver log de pesquisa
+      </button>
+      <button onClick={onPrint} style={{...btnSec,marginBottom:8}}>Imprimir lista</button>
+    </div>
+  );
+}
+
+// ── GOOGLE DRIVE SYNC ──
+const GOOGLE_CLIENT_ID = "556568463566-fca3135da3jcem30hv13m4nc82td9gel.apps.googleusercontent.com";
+const DRIVE_FILE_NAME = "compras-casa-sync.json";
+const SCOPES = "https://www.googleapis.com/auth/drive.appdata";
+
+let gapiReady = false;
+let tokenClient = null;
+
+function initGapi(callback) {
+  if (gapiReady) { callback(); return; }
+  gapi.load("client", async () => {
+    await gapi.client.init({});
+    await gapi.client.load("https://www.googleapis.com/discovery/v1/apis/drive/v3/rest");
+    gapiReady = true;
+    callback();
+  });
+}
+
+function getTokenAndRun(callback) {
+  if (!tokenClient) {
+    tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: GOOGLE_CLIENT_ID,
+      scope: SCOPES,
+      callback: (resp) => {
+        if (resp.error) { console.error(resp); return; }
+        callback();
+      },
+    });
+  }
+  if (gapi.client.getToken() === null) {
+    tokenClient.requestAccessToken({ prompt: "consent" });
+  } else {
+    callback();
+  }
+}
+
+async function getDriveFileId() {
+  const res = await gapi.client.drive.files.list({
+    spaces: "appDataFolder",
+    fields: "files(id,name)",
+    q: `name='${DRIVE_FILE_NAME}'`,
+  });
+  const files = res.result.files;
+  return files && files.length > 0 ? files[0].id : null;
+}
+
+async function saveToDrive(data) {
+  const body = JSON.stringify(data);
+  const fileId = await getDriveFileId();
+  if (fileId) {
+    await gapi.client.request({
+      path: `/upload/drive/v3/files/${fileId}`,
+      method: "PATCH",
+      params: { uploadType: "media" },
+      body,
+    });
+  } else {
+    await gapi.client.request({
+      path: "/upload/drive/v3/files",
+      method: "POST",
+      params: { uploadType: "multipart" },
+      headers: { "Content-Type": 'multipart/related; boundary="boundary"' },
+      body: [
+        '--boundary',
+        'Content-Type: application/json',
+        '',
+        JSON.stringify({ name: DRIVE_FILE_NAME, parents: ["appDataFolder"] }),
+        '--boundary',
+        'Content-Type: application/json',
+        '',
+        body,
+        '--boundary--',
+      ].join("\r\n"),
+    });
+  }
+}
+
+async function loadFromDrive() {
+  const fileId = await getDriveFileId();
+  if (!fileId) return null;
+  const res = await gapi.client.drive.files.get({
+    fileId,
+    alt: "media",
+  });
+  return typeof res.result === "string" ? JSON.parse(res.result) : res.result;
+}
+
+// ── MAIN APP ──
+function App() {
+  const [config,setConfig]   = useState(()=>LS.get("cfg_v1",DEFAULT_CONFIG));
+  const [compras,setCompras] = useState(()=>LS.get("compras_v3",[]));
+  const [estoque,setEstoque] = useState(()=>LS.get("estoque_v1",[]));
+  const [aba,setAba]         = useState("compras");
+  const [modal,setModal]     = useState(null);
+  const [itemSel,setItemSel] = useState(null);
+  const [buscando,setBuscando] = useState(false);
+  const [buscandoNome,setBuscandoNome] = useState("");
+  const [filtros,setFiltros] = useState({cat:[],mercado:"",marca:"",busca:""});
+  const [addNome,setAddNome] = useState("");
+  const [addQtd,setAddQtd]   = useState("1");
+  const [addTarget,setAddTarget] = useState("compras");
+  const [driveStatus,setDriveStatus] = useState(""); // "", "conectando", "sincronizando", "ok", "erro"
+  const [driveConectado,setDriveConectado] = useState(false);
+
+  useEffect(()=>{LS.set("cfg_v1",config);},[config]);
+  useEffect(()=>{
+    const fz = config.fontSize||"medio";
+    document.body.className = (config.tema==="dia"?"tema-dia":"tema-noite") + " fz-"+fz;
+  },[config.tema, config.fontSize]);
+  useEffect(()=>{
+    if(config.categorias) Object.assign(CATS, config.categorias);
+  },[config.categorias]);
+  useEffect(()=>{LS.set("compras_v3",compras);},[compras]);
+  useEffect(()=>{LS.set("estoque_v1",estoque);},[estoque]);
+
+  const lista = aba==="compras"?compras:estoque;
+  const setLista = aba==="compras"?setCompras:setEstoque;
+
+  const total = compras.filter(i=>i.preco).reduce((a,i)=>a+i.preco*i.qtd,0);
+  const totalComprado = compras.filter(i=>i.comprado&&i.preco).reduce((a,i)=>a+i.preco*i.qtd,0);
+  const pct = config.limite>0?(total/config.limite)*100:0;
+  const alerta = pct>=config.alertaPercent;
+  const ultrapassou = pct>=100;
+
+  const itensFiltrados = lista.filter(it=>{
+    if(filtros.busca&&!it.nome.toLowerCase().includes(filtros.busca.toLowerCase())&&
+      !(it.marca||"").toLowerCase().includes(filtros.busca.toLowerCase())) return false;
+    if(filtros.cat.length&&!filtros.cat.includes(it.categoria)) return false;
+    if(filtros.mercado&&(it.mercado_nome||"").toLowerCase()!==filtros.mercado.toLowerCase()) return false;
+    if(filtros.marca&&(it.marca||"").toLowerCase()!==filtros.marca.toLowerCase()) return false;
+    return true;
+  });
+
+  // Sinc estoque → compras
+  // Etapa 1: apenas adiciona/remove itens na lista, marcando novos com _pendenteBusca:true
+  useEffect(()=>{
+    if(!config.sincEstoque) return;
+    setCompras(prev=>{
+      let lst=[...prev];
+      estoque.forEach(ei=>{
+        const nl=ei.nome.toLowerCase();
+        const idx=lst.findIndex(c=>c.nome.toLowerCase()===nl);
+        const jaEsta=idx!==-1;
+        if(ei.qtdEstoque===0&&!jaEsta){
+          lst=[...lst,{id:uid(),nome:ei.nome,categoria:ei.categoria||"outros",qtd:1,
+            unidade:ei.unidade||"un",marca:"",preco:null,comprado:false,adicionadoEm:Date.now(),
+            _fromEstoque:true,_pendenteBusca:true}];
+        } else if(ei.qtdEstoque>=1&&jaEsta){
+          lst=lst.filter((_,i)=>i!==idx);
+        }
+      });
+      return lst;
+    });
+  },[estoque,config.sincEstoque]);
+
+
+
+  const handleAdd = async()=>{
+    if(!addNome.trim()) return;
+    const target=addTarget, nome=addNome.trim(), qtd=parseFloat(addQtd)||1;
+    setAddNome(""); setModal(null);
+    if(target==="estoque"){
+      setEstoque(p=>[...p,{id:uid(),nome,categoria:"outros",qtd,unidade:"un",qtdEstoque:qtd,adicionadoEm:Date.now()}]);
+      return;
+    }
+    const novoItem={id:uid(),nome,qtd,categoria:"outros",marca:"",preco:null,unidade:"un",
+      comprado:false,adicionadoEm:Date.now()};
+    setCompras(p=>[...p,novoItem]);
+    setBuscando(true);
+    setBuscandoNome(nome);
+    const r=await buscarPrecoIA(nome,config.cidade,config.raio,config.apiKey);
+    setBuscando(false);
+    setBuscandoNome("");
+    if(r) setCompras(prev=>prev.map(it=>it.id!==novoItem.id?it:{...it,
+      marca:r.marca||it.marca,categoria:r.categoria||it.categoria,
+      preco:r.preco_unitario||it.preco,unidade:r.unidade||it.unidade,
+      referencia_preco:r.referencia_preco||"estado"}));
+  };
+
+  const gerarBackup=()=>{
+    const ts=new Date().toISOString().replace(/[:.]/g,"-").slice(0,19);
+    const blob=new Blob([JSON.stringify({gerado:fmtDate(Date.now()),config,compras,estoque},null,2)],{type:"application/json"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a"); a.href=url; a.download=`compras-backup-${ts}.json`; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const importarBackup=(e)=>{
+    const file=e.target.files?.[0]; if(!file) return;
+    const reader=new FileReader();
+    reader.onload=(ev)=>{
+      try{
+        const d=JSON.parse(ev.target.result);
+        if(d.compras) setCompras(d.compras);
+        if(d.estoque) setEstoque(d.estoque);
+        if(d.config) setConfig(d.config);
+      } catch{}
+    };
+    reader.readAsText(file);
+    setModal(null);
+  };
+
+  const mercadosUnicos=[];
+  const marcasUnicas=[...new Set(lista.map(i=>i.marca).filter(Boolean))];
+  const abrirDetalhe=(item)=>{setItemSel(item);setModal("detalhe");};
+  // Botão "Pesquisar preços" — busca todos os itens sem preço na lista de compras
+  const sincronizarDrive = async (dadosParaSalvar) => {
+    if (!driveConectado) return;
+    try {
+      setDriveStatus("sincronizando");
+      await saveToDrive(dadosParaSalvar || { compras, estoque, config });
+      setDriveStatus("ok");
+      setTimeout(() => setDriveStatus(""), 2000);
+    } catch(e) {
+      console.error(e);
+      setDriveStatus("erro");
+    }
+  };
+
+  const conectarDrive = () => {
+    setDriveStatus("conectando");
+    initGapi(() => {
+      getTokenAndRun(async () => {
+        try {
+          const dados = await loadFromDrive();
+          if (dados) {
+            if (dados.compras) setCompras(dados.compras);
+            if (dados.estoque) setEstoque(dados.estoque);
+            if (dados.config) setConfig(c => ({...c, ...dados.config, apiKey: c.apiKey}));
+          }
+          setDriveConectado(true);
+          setDriveStatus("ok");
+          setTimeout(() => setDriveStatus(""), 2000);
+        } catch(e) {
+          console.error(e);
+          setDriveStatus("erro");
+        }
+      });
+    });
+  };
+
+  // Auto-save to Drive when data changes
+  const driveConectadoRef = React.useRef(driveConectado);
+  driveConectadoRef.current = driveConectado;
+  useEffect(() => {
+    if (!driveConectadoRef.current) return;
+    const t = setTimeout(() => sincronizarDrive({ compras, estoque, config }), 1500);
+    return () => clearTimeout(t);
+  }, [compras, estoque]);
+
+  const buscarTodos = async () => {
+    if(!config.apiKey?.startsWith("sk-ant-")){
+      alert("Configure a chave API em Config → Pesquisa de preços.");
+      return;
+    }
+    const semPreco = compras.filter(it => !it.preco && !it.comprado);
+    // Se todos já têm preço, atualiza todos; senão busca só os que faltam
+    const alvo = semPreco.length > 0
+      ? semPreco
+      : compras.filter(it => !it.comprado);
+    if(alvo.length === 0) return;
+    for(let i=0; i<alvo.length; i++){
+      const item = alvo[i];
+      if(i>0) await sleep(800);
+      setBuscando(true);
+      setBuscandoNome(item.nome);
+      const r = await buscarPrecoIA(item.nome, config.cidade, config.raio, config.apiKey);
+      setBuscando(false);
+      setBuscandoNome("");
+      if(r) setCompras(prev=>prev.map(it=>it.id!==item.id?it:{...it,
+        marca:r.marca||it.marca, categoria:r.categoria||it.categoria,
+        preco:r.preco_unitario||it.preco, unidade:r.unidade||it.unidade,
+        referencia_preco:r.referencia_preco||"estado"}));
+    }
+  };
+
+  // Transfere todos os itens comprados (verdes) para o estoque de uma vez
+  const enviarParaEstoque = () => {
+    const comprados = compras.filter(i => i.comprado);
+    if(comprados.length === 0) return;
+    setEstoque(prev => {
+      let est = [...prev];
+      comprados.forEach(item => {
+        const nomeLower = item.nome.toLowerCase();
+        const idx = est.findIndex(e => e.nome.toLowerCase() === nomeLower);
+        if(idx !== -1){
+          est = est.map((e,i) => i===idx ? {...e, qtdEstoque:(e.qtdEstoque||0)+item.qtd} : e);
+        } else {
+          est = [...est, {
+            id:uid(), nome:item.nome, categoria:item.categoria||"outros",
+            qtd:item.qtd, unidade:item.unidade||"un",
+            qtdEstoque:item.qtd, adicionadoEm:Date.now(),
+          }];
+        }
+      });
+      return est;
+    });
+    // Remove os comprados da lista de compras
+    setCompras(p => p.filter(i => !i.comprado));
+  };
+
+  const atualizarItem=(id,patch,tgt)=>{
+    const fn=prev=>prev.map(it=>it.id===id?{...it,...patch}:it);
+    if(tgt==="estoque") setEstoque(fn); else setCompras(fn);
+  };
+
+  // Ao marcar como comprado: atualiza lista E sinc com estoque
+  const toggleComprado=(item,aba)=>{
+    // Apenas marca/desmarca — transferência ao estoque é feita manualmente depois
+    atualizarItem(item.id,{comprado:!item.comprado},aba);
+  };
+
+  return (
+    <div style={{height:"100vh",background:"var(--bg)",color:"var(--text)",
+      fontFamily:"'Courier New',monospace",maxWidth:480,margin:"0 auto",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+
+      {/* HEADER */}
+      <div style={{padding:"18px 16px 10px",background:"var(--bg)",flexShrink:0,borderBottom:"1px solid var(--border)"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div>
+            <div style={{fontSize:"var(--fz-xs)",color:"var(--text3)",letterSpacing:3,textTransform:"uppercase"}}>{config.cidade} · {config.raio}km</div>
+            <div style={{fontSize:"var(--fz-xl)",fontWeight:700,letterSpacing:-0.5}}>
+              {aba==="compras"?"Lista de Compras":aba==="estoque"?"Estoque":"Configurações"}
+            </div>
+          </div>
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            {buscando&&<div style={{fontSize:"var(--fz-xs)",color:"#fbbf24",animation:"pulse 1s infinite",maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>⟳ {buscandoNome||"buscando…"}</div>}
+            {driveStatus==="conectando"&&<div style={{fontSize:"var(--fz-xs)",color:"#60a5fa",animation:"pulse 1s infinite"}}>Drive...</div>}
+            {driveStatus==="sincronizando"&&<div style={{fontSize:"var(--fz-xs)",color:"#60a5fa",animation:"pulse 1s infinite"}}>↑ Drive</div>}
+            {driveStatus==="ok"&&<div style={{fontSize:"var(--fz-xs)",color:"#4ade80"}}>✓ Drive</div>}
+            {driveStatus==="erro"&&<div style={{fontSize:"var(--fz-xs)",color:"#f87171"}}>✗ Drive</div>}
+            <button onClick={()=>setModal("filtro")} style={{...iconBtn,
+              color:(filtros.cat.length||filtros.mercado||filtros.marca||filtros.busca)?"#fbbf24":"var(--text3)"}}>⊟</button>
+          </div>
+        </div>
+        {aba==="compras"&&config.limite>0&&(
+          <div style={{marginTop:10}}>
+            <div style={{display:"flex",justifyContent:"space-between",fontSize:"var(--fz-xs)",color:"var(--text3)",marginBottom:4}}>
+              <span style={{color:ultrapassou?"#f87171":alerta?"#fbbf24":"var(--text3)"}}>
+                {ultrapassou?"⚠ LIMITE ULTRAPASSADO":alerta?"⚠ Próximo do limite":"Orçamento"}
+              </span>
+              <span>{fmt(total)} / {fmt(config.limite)}</span>
+            </div>
+            <div style={{height:4,background:"var(--bg3)",borderRadius:2,overflow:"hidden"}}>
+              <div style={{height:"100%",borderRadius:2,transition:"width .4s,background .4s",
+                background:ultrapassou?"#f87171":alerta?"#fbbf24":"#4ade80",width:`${Math.min(pct,100)}%`}}/>
+            </div>
+          </div>
+        )}
+        {(aba==="compras"||aba==="estoque")&&(
+          <div style={{marginTop:10,position:"relative"}}>
+            <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:"var(--text3)",fontSize:"var(--fz)"}}>⌕</span>
+            <input value={filtros.busca} onChange={e=>setFiltros(f=>({...f,busca:e.target.value}))}
+              placeholder="buscar produto, marca…"
+              style={{width:"100%",background:"var(--input)",border:"1px solid var(--border)",borderRadius:8,
+                padding:"7px 12px 7px 30px",color:"var(--text)",fontSize:"var(--fz)",outline:"none",
+                boxSizing:"border-box",fontFamily:"inherit"}}/>
+          </div>
+        )}
+      </div>
+
+      {/* TABS */}
+      <div style={{display:"flex",borderBottom:"1px solid var(--border)",background:"var(--bg)",flexShrink:0}}>
+        {[["compras","Compras"],["estoque","Estoque"],["config","Config"]].map(([key,label])=>(
+          <button key={key} onClick={()=>setAba(key)} style={{flex:1,padding:"9px 4px",background:"none",border:"none",
+            color:aba===key?"#fbbf24":"var(--text3)",fontSize:"var(--fz-sm)",cursor:"pointer",fontFamily:"inherit",
+            borderBottom:aba===key?"2px solid #fbbf24":"2px solid transparent",transition:"all .2s"}}>{label}</button>
+        ))}
+      </div>
+
+      {/* LISTA */}
+      {(aba==="compras"||aba==="estoque")&&(
+        <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
+        <div style={{background:"var(--bg)",borderBottom:"1px solid var(--border)",flexShrink:0,
+          overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
+          <div style={{padding:"10px 16px 10px",display:"flex",gap:6,minWidth:"max-content"}}>
+            <Chip label="Todos" ativo={!filtros.cat.length} cor="#fbbf24" onClick={()=>setFiltros(f=>({...f,cat:[]}))}/>
+            {Object.entries(CATS).map(([key,cat])=>{
+              const n=lista.filter(i=>i.categoria===key).length; if(!n) return null;
+              const ativo=filtros.cat.includes(key);
+              return <Chip key={key} label={`${cat.label} ${n}`} ativo={ativo} cor={cat.cor}
+                onClick={()=>setFiltros(f=>({...f,cat:ativo?f.cat.filter(c=>c!==key):[...f.cat,key]}))}/>;
+            })}
+          </div>
+        </div>
+        <div style={{flex:1,overflowY:"auto",paddingBottom:100}}>
+          <div style={{padding:"0 16px"}}>
+            {itensFiltrados.filter(i=>!i.comprado).length===0&&itensFiltrados.filter(i=>i.comprado).length===0&&<Empty aba={aba}/>}
+            {itensFiltrados.filter(i=>!i.comprado).map(item=>(
+              <ItemCard key={item.id} item={item} aba={aba}
+                onToggle={()=>toggleComprado(item,aba)}
+                onRemove={()=>setLista(p=>p.filter(i=>i.id!==item.id))}
+                onOpen={()=>abrirDetalhe({...item,_lista:aba})}
+                onQtdChange={q=>atualizarItem(item.id,{qtd:q},aba)}
+                onQtdEstoqueChange={q=>atualizarItem(item.id,{qtdEstoque:q},aba)}/>
+            ))}
+            {aba==="compras"&&itensFiltrados.filter(i=>i.comprado).length>0&&(
+              <>
+                <SectionHead label={`Comprados (${itensFiltrados.filter(i=>i.comprado).length})`}
+                  right={<button onClick={enviarParaEstoque}
+                    style={{background:"#4ade8022",border:"1px solid #4ade8044",color:"#4ade80",
+                      fontSize:"var(--fz-sm)",cursor:"pointer",fontFamily:"inherit",borderRadius:6,padding:"3px 8px"}}>
+                    Enviar ao estoque ✓</button>}/>
+                {itensFiltrados.filter(i=>i.comprado).map(item=>(
+                  <ItemCard key={item.id} item={item} aba={aba}
+                    onToggle={()=>toggleComprado(item,aba)}
+                    onRemove={()=>setLista(p=>p.filter(i=>i.id!==item.id))}
+                    onOpen={()=>abrirDetalhe({...item,_lista:aba})}
+                    onQtdChange={q=>atualizarItem(item.id,{qtd:q},aba)}
+                    onQtdEstoqueChange={q=>atualizarItem(item.id,{qtdEstoque:q},aba)}/>
+                ))}
+              </>
+            )}
+          </div>
+          {aba==="compras"&&<Rodape compras={compras} config={config} onPrint={()=>printLista(compras,"Lista de Compras",config)} onBuscar={buscarTodos} buscando={buscando} buscandoNome={buscandoNome} onVerLog={()=>setModal('log')} onEnviarEstoque={enviarParaEstoque}/>}
+          {aba==="estoque"&&<div style={{padding:"12px 16px"}}><button onClick={()=>printLista(estoque,"Estoque",config)} style={btnSec}>Imprimir estoque</button></div>}
+        </div>
+        </div>
+      )}
+
+      {aba==="config"&&(
+        <ConfigPane config={config} setConfig={setConfig}
+          onSincChange={v=>setConfig(c=>({...c,sincEstoque:v}))}
+          onClearCompras={()=>setCompras([])}
+          onClearEstoque={()=>setEstoque([])}
+          onBackup={gerarBackup}
+          onRestore={importarBackup}
+          onPrintCompras={()=>printLista(compras,"Lista de Compras",config)}
+          onPrintEstoque={()=>printLista(estoque,"Estoque",config)}
+          driveConectado={driveConectado}
+          onConectarDrive={conectarDrive}
+          onSincronizarDrive={()=>sincronizarDrive()}/>
+      )}
+
+      {/* FAB */}
+      {(aba==="compras"||aba==="estoque")&&(
+        <button onClick={()=>{setAddTarget(aba);setModal("add");}} style={{
+          position:"fixed",bottom:24,right:20,width:52,height:52,borderRadius:26,
+          background:"#fbbf24",border:"none",color:"#0c0c0c",fontSize:"var(--fz-xl)",cursor:"pointer",
+          boxShadow:"0 4px 20px #fbbf2466",display:"flex",alignItems:"center",justifyContent:"center",zIndex:60}}>+</button>
+      )}
+
+      {/* MODAL ADD */}
+      {modal==="add"&&(
+        <Modal onClose={()=>setModal(null)} title={`Adicionar à ${addTarget==="compras"?"lista":"estoque"}`}>
+          <Inp label="Nome do produto" value={addNome} onChange={e=>setAddNome(e.target.value)} placeholder="ex: Arroz 5kg"/>
+          <Inp label="Quantidade" value={addQtd} onChange={e=>setAddQtd(e.target.value)} type="number"/>
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:"var(--fz-xs)",color:"var(--text3)",letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Adicionar em</div>
+            <div style={{display:"flex",gap:8}}>
+              <Chip label="Compras" ativo={addTarget==="compras"} cor="#fbbf24" onClick={()=>setAddTarget("compras")}/>
+              <Chip label="Estoque" ativo={addTarget==="estoque"} cor="#60a5fa" onClick={()=>setAddTarget("estoque")}/>
+            </div>
+          </div>
+          {config.apiKey?.startsWith("sk-ant-")
+            ? <p style={{fontSize:"var(--fz-sm)",color:"#4ade8088",marginBottom:14}}>✓ IA buscará marca, preço e mercado em {config.cidade} ({config.raio}km).</p>
+            : <p style={{fontSize:"var(--fz-sm)",color:"#f8717188",marginBottom:14}}>⚠ Sem chave API — sem pesquisa automática. Configure em Config.</p>
+          }
+          <button onClick={handleAdd} disabled={!addNome.trim()} style={{
+            width:"100%",padding:"12px",background:addNome.trim()?"#fbbf24":"#2a2a2a",border:"none",
+            borderRadius:8,color:addNome.trim()?"#0c0c0c":"var(--text3)",fontWeight:700,fontSize:"var(--fz)",
+            cursor:addNome.trim()?"pointer":"default",letterSpacing:1,textTransform:"uppercase",fontFamily:"inherit"}}>
+            Adicionar{addTarget==="compras"?" + Buscar preço":""}
+          </button>
+        </Modal>
+      )}
+
+      {/* MODAL DETALHE */}
+      {modal==="detalhe"&&itemSel&&(
+        <DetalheModal item={itemSel} onClose={()=>setModal(null)}
+          onUpdate={patch=>{atualizarItem(itemSel.id,patch,itemSel._lista);setItemSel(s=>({...s,...patch}));}}
+          config={config}/>
+      )}
+
+      {/* MODAL FILTRO */}
+      {modal==="filtro"&&(
+        <Modal onClose={()=>setModal(null)} title="Filtros">
+          <Inp label="Buscar" value={filtros.busca} onChange={e=>setFiltros(f=>({...f,busca:e.target.value}))} placeholder="Pesquisar…"/>
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:"var(--fz-xs)",color:"var(--text3)",letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Categoria</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+              {Object.entries(CATS).map(([key,cat])=>(
+                <Chip key={key} label={cat.label} ativo={filtros.cat.includes(key)} cor={cat.cor}
+                  onClick={()=>setFiltros(f=>({...f,cat:f.cat.includes(key)?f.cat.filter(c=>c!==key):[...f.cat,key]}))}/>
+              ))}
+            </div>
+          </div>
+          {mercadosUnicos.length>0&&(
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:"var(--fz-xs)",color:"var(--text3)",letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Mercado</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                <Chip label="Todos" ativo={!filtros.mercado} cor="var(--text3)" onClick={()=>setFiltros(f=>({...f,mercado:""}))}/>
+                {mercadosUnicos.map(m=><Chip key={m} label={m} ativo={filtros.mercado===m} cor="#60a5fa"
+                  onClick={()=>setFiltros(f=>({...f,mercado:f.mercado===m?"":m}))}/>)}
+              </div>
+            </div>
+          )}
+          {marcasUnicas.length>0&&(
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:"var(--fz-xs)",color:"var(--text3)",letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Marca</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                <Chip label="Todas" ativo={!filtros.marca} cor="var(--text3)" onClick={()=>setFiltros(f=>({...f,marca:""}))}/>
+                {marcasUnicas.map(m=><Chip key={m} label={m} ativo={filtros.marca===m} cor="#a78bfa"
+                  onClick={()=>setFiltros(f=>({...f,marca:f.marca===m?"":m}))}/>)}
+              </div>
+            </div>
+          )}
+          <button onClick={()=>{setFiltros({cat:[],mercado:"",marca:"",busca:""});setModal(null);}}
+            style={{...btnSec,color:"#f87171",borderColor:"#f8717140"}}>Limpar filtros</button>
+        </Modal>
+      )}
+
+
+      {modal==="log"&&(
+        <Modal onClose={()=>setModal(null)} title="Log de pesquisa">
+          <div style={{fontSize:"var(--fz-sm)",color:"var(--text2)",lineHeight:1.8,whiteSpace:"pre-wrap",
+            fontFamily:"monospace",maxHeight:400,overflowY:"auto"}}>
+            {_errosLog.length===0
+              ? "Nenhuma pesquisa realizada ainda."
+              : _errosLog.map((l,i)=><div key={i} style={{
+                  borderBottom:"1px solid var(--border)",padding:"4px 0",
+                  color:l.startsWith("OK")?("#4ade80"):("#f87171")
+                }}>{l}</div>)
+            }
+          </div>
+          <button onClick={()=>{_errosLog.length=0;setModal(null);}} style={{...btnSec,marginTop:12}}>
+            Limpar log
+          </button>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
