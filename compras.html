@@ -402,7 +402,22 @@ function DetalheModal({item,onClose,onUpdate,config}) {
             ].map(([label,key,val])=>(
               <div key={key}>
                 <div style={{fontSize:"var(--fz-xs)",color:"var(--text3)",letterSpacing:2,textTransform:"uppercase",marginBottom:3}}>{label}</div>
-                <input value={val||""} onChange={e=>save({[key]:key==="preco"?parseFloat(e.target.value)||null:e.target.value})}
+                <input
+                  value={key==="preco" && val ? String(val).replace(".",",") : val||""}
+                  onChange={e=>{
+                    const raw = e.target.value;
+                    if(key==="preco"){
+                      // Vírgula como separador decimal (padrão brasileiro)
+                      const normalized = raw.replace(",",".");
+                      const num = parseFloat(normalized);
+                      save({[key]: raw===""?null: isNaN(num)?null:num});
+                    } else {
+                      save({[key]:raw});
+                    }
+                  }}
+                  type="text"
+                  inputMode={key==="preco"?"decimal":"text"}
+                  placeholder={key==="preco"?"0,00":""}
                   style={{width:"100%",background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:6,
                     padding:"7px 10px",color:"var(--text)",fontSize:"var(--fz)",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
               </div>
