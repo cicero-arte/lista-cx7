@@ -421,15 +421,18 @@ function DetalheModal({item,onClose,onUpdate,config}) {
           </div>
           <div style={{background:"var(--bg3)",borderRadius:8,padding:"14px",marginBottom:14,border:"1px solid var(--border)"}}>
             <div style={{fontSize:"var(--fz-xs)",color:"var(--text3)",letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Quantidade em estoque</div>
-            <div style={{display:"flex",alignItems:"center",gap:12}}>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
               <button onClick={()=>save({qtdEstoque:Math.max(0,(local.qtdEstoque||0)-1)})}
-                style={{width:36,height:36,borderRadius:8,background:"var(--border)",border:"none",color:"var(--text)",fontSize:"var(--fz-xl)",cursor:"pointer",fontFamily:"inherit"}}>−</button>
+                style={{width:40,height:40,borderRadius:8,background:"var(--border)",border:"none",
+                  color:"var(--text)",fontSize:20,cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>−</button>
               <input value={local.qtdEstoque??0} type="number" min="0"
                 onChange={e=>save({qtdEstoque:parseFloat(e.target.value)||0})}
-                style={{flex:1,background:"var(--input)",border:"1px solid #333",borderRadius:8,padding:"10px",
-                  color:"#fbbf24",fontSize:"var(--fz-xl)",fontWeight:700,outline:"none",textAlign:"center",fontFamily:"inherit"}}/>
+                style={{width:0,flex:1,minWidth:0,background:"var(--input)",border:"1px solid #333",
+                  borderRadius:8,padding:"10px 4px",color:"#fbbf24",fontSize:20,fontWeight:700,
+                  outline:"none",textAlign:"center",fontFamily:"inherit",boxSizing:"border-box"}}/>
               <button onClick={()=>save({qtdEstoque:(local.qtdEstoque||0)+1})}
-                style={{width:36,height:36,borderRadius:8,background:"var(--border)",border:"none",color:"var(--text)",fontSize:"var(--fz-xl)",cursor:"pointer",fontFamily:"inherit"}}>+</button>
+                style={{width:40,height:40,borderRadius:8,background:"var(--border)",border:"none",
+                  color:"var(--text)",fontSize:20,cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>+</button>
             </div>
             <div style={{fontSize:"var(--fz-xs)",color:local.qtdEstoque===0?"#f87171":"#4ade80",marginTop:8,textAlign:"center"}}>
               {local.qtdEstoque===0?"⚠ Zerado — entrará na lista de compras":"✓ Em estoque"}
@@ -1042,25 +1045,44 @@ function App() {
       alert("Configure a chave API em Config → Pesquisa de preços.");
       return;
     }
-    // Convert to base64
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      const base64 = ev.target.result.split(",")[1];
-      setAnalisando(true);
-      setProdutosIdentificados([]);
+    setAnalisando(true);
+    setProdutosIdentificados([]);
+    try {
+      // Resize image to max 1024px to ensure good quality without being too large
+      const base64 = await new Promise((resolve, reject) => {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => {
+          URL.revokeObjectURL(url);
+          const canvas = document.createElement("canvas");
+          const max = 1024;
+          let w = img.width, h = img.height;
+          if (w > max || h > max) {
+            if (w > h) { h = Math.round(h * max / w); w = max; }
+            else { w = Math.round(w * max / h); h = max; }
+          }
+          canvas.width = w; canvas.height = h;
+          canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL("image/jpeg", 0.85).split(",")[1]);
+        };
+        img.onerror = reject;
+        img.src = url;
+      });
       const resultado = await analisarDispensa(base64, config.apiKey);
       setAnalisando(false);
       if (resultado && resultado.produtos && resultado.produtos.length > 0) {
         setProdutosIdentificados(resultado.produtos);
-        // Pre-select all
         const sel = {};
-        resultado.produtos.forEach((p, i) => { sel[i] = true; });
+        resultado.produtos.forEach((_, i) => { sel[i] = true; });
         setProdutosSelecionados(sel);
       } else {
-        alert("Não consegui identificar produtos. Tente uma foto com melhor iluminação e produtos mais visíveis.");
+        alert("Não identificou produtos. Dicas: aproxime mais a câmera, melhore a iluminação, ou tente uma prateleira de cada vez.");
       }
-    };
-    reader.readAsDataURL(file);
+    } catch(err) {
+      setAnalisando(false);
+      alert("Erro ao processar a foto. Tente novamente.");
+      console.error(err);
+    }
   };
 
   const confirmarProdutosIdentificados = () => {
@@ -1255,12 +1277,26 @@ function App() {
           {aba==="compras"&&<Rodape compras={compras} config={config} onPrint={()=>printLista(compras,"Lista de Compras",config)} onBuscar={buscarTodos} buscando={buscando} buscandoNome={buscandoNome} onVerLog={()=>setModal('log')} onEnviarEstoque={enviarParaEstoque}/>}
           {aba==="estoque"&&(
           <div style={{padding:"12px 16px",display:"flex",flexDirection:"column",gap:8}}>
-            <label style={{...btnSec,textAlign:"center",cursor:"pointer",
-              color:"#fbbf24",borderColor:"#fbbf2466",display:"block"}}>
-              {analisando ? "Analisando foto..." : "Fotografar dispensa"}
-              <input type="file" accept="image/*" capture="environment"
-                onChange={handleFoto} style={{display:"none"}}/>
-            </label>
+            {analisando ? (
+              <div style={{...btnSec,textAlign:"center",color:"#fbbf24",
+                borderColor:"#fbbf2466",animation:"pulse 1s infinite"}}>
+                Analisando foto...
+              </div>
+            ) : (
+              <>
+                <label style={{...btnSec,textAlign:"center",cursor:"pointer",
+                  color:"#fbbf24",borderColor:"#fbbf2466",display:"block",marginBottom:8}}>
+                  Fotografar dispensa
+                  <input type="file" accept="image/*" capture="environment"
+                    onChange={handleFoto} style={{display:"none"}}/>
+                </label>
+                <label style={{...btnSec,textAlign:"center",cursor:"pointer",display:"block"}}>
+                  Escolher da galeria
+                  <input type="file" accept="image/*"
+                    onChange={handleFoto} style={{display:"none"}}/>
+                </label>
+              </>
+            )}
             <button onClick={()=>printLista(estoque,"Estoque",config)} style={btnSec}>Imprimir estoque</button>
           </div>
         )}
