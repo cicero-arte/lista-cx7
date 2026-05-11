@@ -305,6 +305,7 @@ function ItemCard({item,aba,onToggle,onRemove,onOpen,onQtdChange,onQtdEstoqueCha
   const cat = CATS[item.categoria]||CATS.outros;
   const subtotal = item.preco ? item.preco*item.qtd : null;
   const [qtdLocal,setQtdLocal] = useState(String(item.qtd));
+  const [confirmDelete,setConfirmDelete] = useState(false);
   const qtdEst = item.qtdEstoque??0;
   const handleQtd = (v) => { setQtdLocal(v); const n=parseFloat(v); if(!isNaN(n)&&n>0) onQtdChange(n); };
   const dec = () => onQtdEstoqueChange(Math.max(0,qtdEst-1));
@@ -381,12 +382,28 @@ function ItemCard({item,aba,onToggle,onRemove,onOpen,onQtdChange,onQtdEstoqueCha
           </div>
         )}
 
-        <button onClick={onRemove} style={{background:"none",border:"none",color:"#2a2a2a",
-          cursor:"pointer",fontSize:"var(--fz-xl)",padding:"0 2px",flexShrink:0,fontFamily:"inherit"}}
-          onTouchStart={e=>e.currentTarget.style.color="#f87171"}
-          onTouchEnd={e=>e.currentTarget.style.color="#2a2a2a"}
-          onMouseEnter={e=>e.currentTarget.style.color="#f87171"}
-          onMouseLeave={e=>e.currentTarget.style.color="#2a2a2a"}>×</button>
+        {confirmDelete ? (
+          <div style={{display:"flex",gap:4,flexShrink:0}}>
+            <button onClick={onRemove} style={{
+              padding:"5px 9px",borderRadius:6,background:"#f87171",border:"none",
+              color:"#0c0c0c",fontSize:"var(--fz-xs)",fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+              Sim
+            </button>
+            <button onClick={()=>setConfirmDelete(false)} style={{
+              padding:"5px 9px",borderRadius:6,background:"var(--bg3)",border:"none",
+              color:"var(--text)",fontSize:"var(--fz-xs)",cursor:"pointer",fontFamily:"inherit"}}>
+              Não
+            </button>
+          </div>
+        ) : (
+          <button onClick={()=>setConfirmDelete(true)} style={{background:"none",border:"none",
+            color:"var(--text3)",cursor:"pointer",fontSize:"var(--fz-xl)",
+            padding:"0 4px",flexShrink:0,fontFamily:"inherit"}}
+            onTouchStart={e=>e.currentTarget.style.color="#f87171"}
+            onTouchEnd={e=>e.currentTarget.style.color="var(--text3)"}
+            onMouseEnter={e=>e.currentTarget.style.color="#f87171"}
+            onMouseLeave={e=>e.currentTarget.style.color="var(--text3)"}>×</button>
+        )}
       </div>
     </div>
   );
