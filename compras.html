@@ -76,6 +76,54 @@ const LS = {
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
+async function analisarDispensa(imageBase64, apiKey) {
+  if (!apiKey || !apiKey.startsWith("sk-ant-")) return null;
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true",
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 1000,
+        messages: [{
+          role: "user",
+          content: [
+            {
+              type: "image",
+              source: { type: "base64", media_type: "image/jpeg", data: imageBase64 }
+            },
+            {
+              type: "text",
+              text: `Analise esta foto de uma dispensa/geladeira/armário e liste os produtos alimentícios e de limpeza visíveis.
+Responda SOMENTE com JSON válido, sem markdown, sem explicações.
+Formato: {"produtos": [{"nome": "string", "quantidade": number, "unidade": "string", "categoria": "hortifruti|carnes|laticinios|mercearia|limpeza|higiene|bebidas|padaria|congelados|outros"}]}
+Se não conseguir identificar nenhum produto, retorne {"produtos": []}.
+Estime a quantidade visível (número de unidades, pacotes, etc). Use unidade "un" para unidades, "kg" para peso, "L" para líquidos.`
+            }
+          ]
+        }]
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const text = data.content?.find(b => b.type === "text")?.text || "";
+    const start = text.indexOf("{");
+    if (start === -1) return null;
+    let depth = 0, jsonStr = null;
+    for (let i = start; i < text.length; i++) {
+      if (text[i] === "{") depth++;
+      else if (text[i] === "}") { depth--; if (depth === 0) { jsonStr = text.slice(start, i+1); break; } }
+    }
+    if (!jsonStr) return null;
+    return JSON.parse(jsonStr);
+  } catch(e) { return null; }
+}
+
 // Log global de erros de busca — visível na tela
 const _errosLog = [];
 function addLog(msg){ _errosLog.push(msg); console.error("[busca]", msg); }
@@ -833,6 +881,10 @@ function App() {
   const [addQtd,setAddQtd]   = useState("1");
   const [addTarget,setAddTarget] = useState("compras");
   const [driveStatus,setDriveStatus] = useState(""); // "", "conectando", "sincronizando", "ok", "erro"
+  const [modalCamera, setModalCamera] = useState(false);
+  const [analisando, setAnalisando] = useState(false);
+  const [produtosIdentificados, setProdutosIdentificados] = useState([]);
+  const [produtosSelecionados, setProdutosSelecionados] = useState({});
   const [driveConectado,setDriveConectado] = useState(false);
 
   useEffect(()=>{LS.set("cfg_v1",config);},[config]);
@@ -980,6 +1032,59 @@ function App() {
     const t = setTimeout(() => sincronizarDrive({ compras, estoque, config }), 1500);
     return () => clearTimeout(t);
   }, [compras, estoque]);
+
+  const handleFoto = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!config.apiKey?.startsWith("sk-ant-")) {
+      alert("Configure a chave API em Config → Pesquisa de preços.");
+      return;
+    }
+    // Convert to base64
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const base64 = ev.target.result.split(",")[1];
+      setAnalisando(true);
+      setProdutosIdentificados([]);
+      const resultado = await analisarDispensa(base64, config.apiKey);
+      setAnalisando(false);
+      if (resultado && resultado.produtos && resultado.produtos.length > 0) {
+        setProdutosIdentificados(resultado.produtos);
+        // Pre-select all
+        const sel = {};
+        resultado.produtos.forEach((p, i) => { sel[i] = true; });
+        setProdutosSelecionados(sel);
+      } else {
+        alert("Não consegui identificar produtos. Tente uma foto com melhor iluminação e produtos mais visíveis.");
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const confirmarProdutosIdentificados = () => {
+    const novos = produtosIdentificados
+      .filter((_, i) => produtosSelecionados[i])
+      .map(p => ({
+        id: uid(), nome: p.nome, categoria: p.categoria || "outros",
+        qtd: p.quantidade || 1, unidade: p.unidade || "un",
+        qtdEstoque: p.quantidade || 1, adicionadoEm: Date.now(),
+      }));
+    setEstoque(prev => {
+      let est = [...prev];
+      novos.forEach(novo => {
+        const idx = est.findIndex(e => e.nome.toLowerCase() === novo.nome.toLowerCase());
+        if (idx !== -1) {
+          est = est.map((e, i) => i === idx ? {...e, qtdEstoque: (e.qtdEstoque||0) + novo.qtdEstoque} : e);
+        } else {
+          est = [...est, novo];
+        }
+      });
+      return est;
+    });
+    setModalCamera(false);
+    setProdutosIdentificados([]);
+    setProdutosSelecionados({});
+  };
 
   const buscarTodos = async () => {
     if(!config.apiKey?.startsWith("sk-ant-")){
@@ -1146,7 +1251,17 @@ function App() {
             )}
           </div>
           {aba==="compras"&&<Rodape compras={compras} config={config} onPrint={()=>printLista(compras,"Lista de Compras",config)} onBuscar={buscarTodos} buscando={buscando} buscandoNome={buscandoNome} onVerLog={()=>setModal('log')} onEnviarEstoque={enviarParaEstoque}/>}
-          {aba==="estoque"&&<div style={{padding:"12px 16px"}}><button onClick={()=>printLista(estoque,"Estoque",config)} style={btnSec}>Imprimir estoque</button></div>}
+          {aba==="estoque"&&(
+          <div style={{padding:"12px 16px",display:"flex",flexDirection:"column",gap:8}}>
+            <label style={{...btnSec,textAlign:"center",cursor:"pointer",
+              color:"#fbbf24",borderColor:"#fbbf2466",display:"block"}}>
+              {analisando ? "Analisando foto..." : "Fotografar dispensa"}
+              <input type="file" accept="image/*" capture="environment"
+                onChange={handleFoto} style={{display:"none"}}/>
+            </label>
+            <button onClick={()=>printLista(estoque,"Estoque",config)} style={btnSec}>Imprimir estoque</button>
+          </div>
+        )}
         </div>
         </div>
       )}
@@ -1243,6 +1358,42 @@ function App() {
         </Modal>
       )}
 
+
+      {/* MODAL CONFIRMAÇÃO PRODUTOS IDENTIFICADOS */}
+      {produtosIdentificados.length>0&&(
+        <Modal onClose={()=>{setProdutosIdentificados([]);setProdutosSelecionados({});}} title="Produtos identificados">
+          <p style={{fontSize:"var(--fz-sm)",color:"var(--text2)",marginBottom:14}}>
+            Selecione os produtos para adicionar ao estoque:
+          </p>
+          <div style={{marginBottom:16}}>
+            {produtosIdentificados.map((p,i)=>(
+              <div key={i} onClick={()=>setProdutosSelecionados(s=>({...s,[i]:!s[i]}))}
+                style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",
+                  borderBottom:"1px solid var(--border)",cursor:"pointer",
+                  opacity:produtosSelecionados[i]?1:0.4}}>
+                <div style={{width:22,height:22,borderRadius:6,flexShrink:0,
+                  border:`2px solid ${produtosSelecionados[i]?"#4ade80":"var(--border)"}`,
+                  background:produtosSelecionados[i]?"#4ade8022":"transparent",
+                  display:"flex",alignItems:"center",justifyContent:"center",
+                  color:"#4ade80",fontSize:"var(--fz-sm)"}}>
+                  {produtosSelecionados[i]?"✓":""}
+                </div>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:"var(--fz)",color:"var(--text)"}}>{p.nome}</div>
+                  <div style={{fontSize:"var(--fz-sm)",color:"var(--text3)"}}>
+                    {p.quantidade} {p.unidade} · {CATS[p.categoria]?.label||p.categoria}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <button onClick={confirmarProdutosIdentificados} style={{...btnPri,marginBottom:8}}>
+            Adicionar ao estoque ({Object.values(produtosSelecionados).filter(Boolean).length})
+          </button>
+          <button onClick={()=>{setProdutosIdentificados([]);setProdutosSelecionados({});}}
+            style={btnSec}>Cancelar</button>
+        </Modal>
+      )}
 
       {modal==="log"&&(
         <Modal onClose={()=>setModal(null)} title="Log de pesquisa">
