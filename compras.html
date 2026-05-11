@@ -88,8 +88,8 @@ async function analisarDispensa(imageBase64, apiKey) {
         "anthropic-dangerous-direct-browser-access": "true",
       },
       body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 1000,
+        model: "claude-sonnet-4-6",
+        max_tokens: 1500,
         messages: [{
           role: "user",
           content: [
@@ -99,11 +99,13 @@ async function analisarDispensa(imageBase64, apiKey) {
             },
             {
               type: "text",
-              text: `Analise esta foto de uma dispensa/geladeira/armário e liste os produtos alimentícios e de limpeza visíveis.
+              text: `Você é um assistente de controle de estoque doméstico brasileiro.
+Analise esta foto e identifique TODOS os produtos visíveis — alimentos, bebidas, limpeza, higiene.
+Seja generoso: mesmo que a embalagem esteja parcialmente visível ou a foto não seja perfeita, tente identificar.
+Estime a quantidade de unidades/pacotes visíveis. Se não conseguir contar, coloque 1.
 Responda SOMENTE com JSON válido, sem markdown, sem explicações.
-Formato: {"produtos": [{"nome": "string", "quantidade": number, "unidade": "string", "categoria": "hortifruti|carnes|laticinios|mercearia|limpeza|higiene|bebidas|padaria|congelados|outros"}]}
-Se não conseguir identificar nenhum produto, retorne {"produtos": []}.
-Estime a quantidade visível (número de unidades, pacotes, etc). Use unidade "un" para unidades, "kg" para peso, "L" para líquidos.`
+Formato: {"produtos": [{"nome": "string (nome do produto em português)", "quantidade": number, "unidade": "un|kg|L|g|ml", "categoria": "hortifruti|carnes|laticinios|mercearia|limpeza|higiene|bebidas|padaria|congelados|outros"}]}
+Se realmente não conseguir identificar nada, retorne {"produtos": []}.`
             }
           ]
         }]
