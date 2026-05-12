@@ -62,7 +62,7 @@ let CATS = {...CATS_DEFAULT};
 const DEFAULT_CONFIG = {
   raio: 10, limite: 500, alertaPercent: 80,
   sincEstoque: false, cidade: "Sobradinho, DF", apiKey: "", tema: "noite",
-  categorias: CATS_DEFAULT, fontSize: "medio",
+  categorias: CATS_DEFAULT, fontSize: "medio", ordenarAlfa: false,
 };
 
 const uid = (() => { let n = Date.now(); return () => String(++n); })();
@@ -305,7 +305,42 @@ function ItemCard({item,aba,onToggle,onRemove,onOpen,onQtdChange,onQtdEstoqueCha
   const cat = CATS[item.categoria]||CATS.outros;
   const subtotal = item.preco ? item.preco*item.qtd : null;
   const [qtdLocal,setQtdLocal] = useState(String(item.qtd));
+  const [swipeX,setSwipeX] = useState(0);
+  const [swiping,setSwiping] = useState(false);
   const [confirmDelete,setConfirmDelete] = useState(false);
+  const touchStartX = React.useRef(null);
+  const touchStartY = React.useRef(null);
+  const THRESHOLD = 80; // px to reveal delete
+
+  const onTouchStart = (e) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+    setSwiping(false);
+  };
+  const onTouchMove = (e) => {
+    if (touchStartX.current === null) return;
+    const dx = e.touches[0].clientX - touchStartX.current;
+    const dy = Math.abs(e.touches[0].clientY - touchStartY.current);
+    if (dy > 20 && !swiping) return; // vertical scroll, ignore
+    if (dx < 0) {
+      setSwiping(true);
+      setSwipeX(Math.max(dx, -THRESHOLD - 10));
+      setConfirmDelete(false);
+    }
+  };
+  const onTouchEnd = () => {
+    if (swipeX < -THRESHOLD / 2) {
+      setSwipeX(-THRESHOLD);
+      setConfirmDelete(true);
+    } else {
+      setSwipeX(0);
+      setConfirmDelete(false);
+    }
+    setSwiping(false);
+    touchStartX.current = null;
+  };
+  const cancelSwipe = () => { setSwipeX(0); setConfirmDelete(false); };
+
   const qtdEst = item.qtdEstoque??0;
   const handleQtd = (v) => { setQtdLocal(v); const n=parseFloat(v); if(!isNaN(n)&&n>0) onQtdChange(n); };
   const dec = () => onQtdEstoqueChange(Math.max(0,qtdEst-1));
@@ -313,10 +348,37 @@ function ItemCard({item,aba,onToggle,onRemove,onOpen,onQtdChange,onQtdEstoqueCha
   const isComprado = aba==="compras" && item.comprado;
 
   return (
-    <div style={{padding:"10px 8px",borderBottom:"1px solid var(--border)",
-      background: isComprado ? "#4ade8011" : "transparent",
-      borderLeft: isComprado ? "3px solid #4ade80" : "3px solid transparent",
-      transition:"background .2s"}}>
+    <div style={{position:"relative",overflow:"hidden",borderBottom:"1px solid var(--border)"}}>
+      {/* Delete background */}
+      <div style={{position:"absolute",right:0,top:0,bottom:0,width:THRESHOLD+10,
+        background:"#f87171",display:"flex",alignItems:"center",justifyContent:"center"}}>
+        {confirmDelete ? (
+          <div style={{display:"flex",flexDirection:"column",gap:4,alignItems:"center"}}>
+            <button onClick={onRemove} style={{padding:"4px 12px",background:"#0c0c0c",border:"none",
+              borderRadius:6,color:"#f87171",fontWeight:700,fontSize:"var(--fz-xs)",cursor:"pointer",fontFamily:"inherit"}}>
+              Apagar
+            </button>
+            <button onClick={cancelSwipe} style={{padding:"3px 10px",background:"transparent",border:"none",
+              color:"#0c0c0c",fontSize:"var(--fz-xs)",cursor:"pointer",fontFamily:"inherit",opacity:.8}}>
+              Cancelar
+            </button>
+          </div>
+        ) : (
+          <span style={{color:"#0c0c0c",fontSize:"var(--fz-sm)",fontWeight:700}}>Apagar</span>
+        )}
+      </div>
+      {/* Card content — slides left on swipe */}
+      <div
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        style={{
+          transform:`translateX(${swipeX}px)`,
+          transition: swiping ? "none" : "transform .25s ease",
+          padding:"10px 8px",
+          background: isComprado ? "#4ade8011" : "var(--bg)",
+          borderLeft: isComprado ? "3px solid #4ade80" : "3px solid transparent",
+        }}>
       <div style={{display:"flex",alignItems:"center",gap:10}}>
         {aba==="compras" ? (
           <button onClick={onToggle} style={{width:24,height:24,borderRadius:7,flexShrink:0,
@@ -382,28 +444,8 @@ function ItemCard({item,aba,onToggle,onRemove,onOpen,onQtdChange,onQtdEstoqueCha
           </div>
         )}
 
-        {confirmDelete ? (
-          <div style={{display:"flex",gap:4,flexShrink:0}}>
-            <button onClick={onRemove} style={{
-              padding:"5px 9px",borderRadius:6,background:"#f87171",border:"none",
-              color:"#0c0c0c",fontSize:"var(--fz-xs)",fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
-              Sim
-            </button>
-            <button onClick={()=>setConfirmDelete(false)} style={{
-              padding:"5px 9px",borderRadius:6,background:"var(--bg3)",border:"none",
-              color:"var(--text)",fontSize:"var(--fz-xs)",cursor:"pointer",fontFamily:"inherit"}}>
-              Não
-            </button>
-          </div>
-        ) : (
-          <button onClick={()=>setConfirmDelete(true)} style={{background:"none",border:"none",
-            color:"var(--text3)",cursor:"pointer",fontSize:"var(--fz-xl)",
-            padding:"0 4px",flexShrink:0,fontFamily:"inherit"}}
-            onTouchStart={e=>e.currentTarget.style.color="#f87171"}
-            onTouchEnd={e=>e.currentTarget.style.color="var(--text3)"}
-            onMouseEnter={e=>e.currentTarget.style.color="#f87171"}
-            onMouseLeave={e=>e.currentTarget.style.color="var(--text3)"}>×</button>
-        )}
+
+      </div>
       </div>
     </div>
   );
@@ -542,6 +584,8 @@ function ConfigPane({config,setConfig,onSincChange,onClearCompras,onClearEstoque
       <Section title="Aparência">
         <Toggle value={config.tema==="dia"} onChange={v=>upd("tema",v?"dia":"noite")}
           label={config.tema==="dia" ? "☀ Tema Dia (fundo claro)" : "🌙 Tema Noite (fundo escuro)"}/>
+        <Toggle value={config.ordenarAlfa||false} onChange={v=>upd("ordenarAlfa",v)}
+          label="Ordenar itens por ordem alfabética"/>
         <div style={{marginTop:12}}>
           <div style={{fontSize:"var(--fz-xs)",color:"var(--text3)",letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>
             Tamanho das letras
@@ -929,14 +973,18 @@ function App() {
   const alerta = pct>=config.alertaPercent;
   const ultrapassou = pct>=100;
 
-  const itensFiltrados = lista.filter(it=>{
-    if(filtros.busca&&!it.nome.toLowerCase().includes(filtros.busca.toLowerCase())&&
-      !(it.marca||"").toLowerCase().includes(filtros.busca.toLowerCase())) return false;
-    if(filtros.cat.length&&!filtros.cat.includes(it.categoria)) return false;
-    if(filtros.mercado&&(it.mercado_nome||"").toLowerCase()!==filtros.mercado.toLowerCase()) return false;
-    if(filtros.marca&&(it.marca||"").toLowerCase()!==filtros.marca.toLowerCase()) return false;
-    return true;
-  });
+  const itensFiltrados = (() => {
+    let r = lista.filter(it=>{
+      if(filtros.busca&&!it.nome.toLowerCase().includes(filtros.busca.toLowerCase())&&
+        !(it.marca||"").toLowerCase().includes(filtros.busca.toLowerCase())) return false;
+      if(filtros.cat.length&&!filtros.cat.includes(it.categoria)) return false;
+      if(filtros.mercado&&(it.mercado_nome||"").toLowerCase()!==filtros.mercado.toLowerCase()) return false;
+      if(filtros.marca&&(it.marca||"").toLowerCase()!==filtros.marca.toLowerCase()) return false;
+      return true;
+    });
+    if(config.ordenarAlfa) r=[...r].sort((a,b)=>a.nome.localeCompare(b.nome,"pt-BR"));
+    return r;
+  })();
 
   // Sinc estoque → compras
   // Etapa 1: apenas adiciona/remove itens na lista, marcando novos com _pendenteBusca:true
