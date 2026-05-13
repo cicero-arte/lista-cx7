@@ -848,28 +848,41 @@ function Rodape({compras,config,onPrint,onBuscar,buscando,buscandoNome,onVerLog,
 // ── ASSISTENTE DE VOZ ──
 async function interpretarComando(texto, compras, estoque, apiKey) {
   if (!apiKey || !apiKey.startsWith("sk-ant-")) return null;
-  const listaCompras = compras.map(i => `${i.nome}${i.marca?" ("+i.marca+")":""}${i.preco?" R$"+i.preco:""}${i.qtd?" qtd:"+i.qtd:""}`).join(", ") || "vazia";
-  const listaEstoque = estoque.map(i => `${i.nome} (qtd:${i.qtdEstoque??0})`).join(", ") || "vazio";
-  const prompt = `Você é o assistente de controle de compras domésticas. Interprete o comando do usuário e retorne a ação a executar.
+  // Contexto rico para a IA
+  const itensComprasPendentes = compras.filter(i=>!i.comprado);
+  const itensComprasComprados = compras.filter(i=>i.comprado);
+  const itensEstoqueZerado = estoque.filter(i=>(i.qtdEstoque??0)===0);
+  const itensEstoqueOk = estoque.filter(i=>(i.qtdEstoque??0)>0);
 
-Lista de compras atual: ${listaCompras}
-Estoque atual: ${listaEstoque}
+  const ctxCompras = compras.length===0 ? "vazia" :
+    `${compras.length} itens total. Pendentes(${itensComprasPendentes.length}): ${itensComprasPendentes.map(i=>`${i.nome}${i.marca?" "+i.marca:""}${i.preco?" R$"+i.preco:""}${i.qtd?" x"+i.qtd:""}`).join("; ")||"nenhum"}. Comprados(${itensComprasComprados.length}): ${itensComprasComprados.map(i=>i.nome).join(", ")||"nenhum"}.`;
 
-Comando do usuário: "${texto}"
+  const ctxEstoque = estoque.length===0 ? "vazio" :
+    `${estoque.length} itens total. Em estoque(${itensEstoqueOk.length}): ${itensEstoqueOk.map(i=>`${i.nome}(${i.qtdEstoque})`).join(", ")||"nenhum"}. Zerados(${itensEstoqueZerado.length}): ${itensEstoqueZerado.map(i=>i.nome).join(", ")||"nenhum"}.`;
 
-Responda SOMENTE com JSON válido. Identifique a ação e os dados necessários.
-Tipos de ação possíveis:
-- "reduzir_estoque": reduz quantidade de um item do estoque. Campos: nome, quantidade (padrão 1)
-- "aumentar_estoque": aumenta quantidade de um item do estoque. Campos: nome, quantidade (padrão 1)
-- "adicionar_compras": adiciona item na lista de compras. Campos: nome, quantidade, unidade, preco (opcional)
-- "marcar_comprado": marca item como comprado na lista. Campos: nome, preco (opcional - preço real pago)
-- "remover_compras": remove item da lista de compras. Campos: nome
-- "consultar": consulta informação. Campos: tipo ("estoque"|"compras"), nome (opcional)
-- "desconhecido": não entendeu o comando. Campos: mensagem explicando
+  const prompt = `Você é o assistente inteligente de controle de compras domésticas. Você tem domínio total do estado atual do app.
 
-Se o nome do produto no comando for parecido mas diferente do que está na lista, inclua o campo "nome_original" com o nome exato da lista e "nome_novo" com o nome do comando, para perguntar ao usuário se deve substituir.
+ESTADO ATUAL DO APP:
+Lista de compras: ${ctxCompras}
+Estoque: ${ctxEstoque}
 
-Formato: {"acao": "string", "nome": "string", "quantidade": number, "unidade": "string", "preco": number|null, "nome_original": "string|null", "nome_novo": "string|null", "mensagem": "string"}`;
+COMANDO DO USUÁRIO: "${texto}"
+
+Interprete o comando e retorne a ação. Para perguntas/consultas, coloque acao="consultar" e uma resposta completa em "mensagem".
+Para ações, identifique o item mais próximo da lista mesmo que o nome seja levemente diferente.
+
+Tipos de ação:
+- "reduzir_estoque": reduz qtd no estoque. Campos: nome (exato da lista), quantidade
+- "aumentar_estoque": aumenta qtd no estoque. Campos: nome (exato da lista), quantidade
+- "adicionar_compras": adiciona em compras. Campos: nome, quantidade, unidade, preco
+- "marcar_comprado": marca como comprado. Campos: nome (exato da lista), preco (se informado)
+- "remover_compras": remove da lista. Campos: nome (exato da lista)
+- "consultar": responde pergunta sobre o app. Campos: mensagem (resposta completa em português)
+- "desconhecido": não entendeu. Campos: mensagem explicando
+
+Se nome no comando difere do cadastrado, use nome_original (da lista) e nome_novo (do comando) para confirmar.
+
+Responda SOMENTE com JSON: {"acao":"string","nome":"string","quantidade":number,"unidade":"string","preco":number|null,"nome_original":null,"nome_novo":null,"mensagem":"string"}`;
 
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -1313,12 +1326,8 @@ function App() {
         break;
       }
       case "consultar": {
-        if (acao.tipo === "estoque") {
-          const item = acao.nome ? estoque.find(i => i.nome.toLowerCase().includes(nomeLower)) : null;
-          setVozStatus(item ? `${item.nome}: ${item.qtdEstoque||0} ${item.unidade||"un"} em estoque.` : `${estoque.length} itens no estoque.`);
-        } else {
-          setVozStatus(`${compras.filter(i=>!i.comprado).length} itens pendentes na lista de compras.`);
-        }
+        // Use the AI's own mensagem — it has full context and formed a proper answer
+        setVozStatus(acao.mensagem || "Consulta realizada.");
         break;
       }
       default:
@@ -1410,10 +1419,21 @@ function App() {
             {driveStatus==="sincronizando"&&<div style={{fontSize:"var(--fz-xs)",color:"#60a5fa",animation:"pulse 1s infinite"}}>↑ Drive</div>}
             {driveStatus==="ok"&&<div style={{fontSize:"var(--fz-xs)",color:"#4ade80"}}>✓ Drive</div>}
             {driveStatus==="erro"&&<div style={{fontSize:"var(--fz-xs)",color:"#f87171"}}>✗ Drive</div>}
-            <button onClick={()=>setModalVoz(true)} style={{...iconBtn,
-              color: vozOuvindo ? "#f87171" : "var(--text3)",
+            <button onClick={()=>setModalVoz(true)} style={{
+              background:"none",border:"none",cursor:"pointer",padding:"4px",
+              display:"flex",alignItems:"center",justifyContent:"center",
               animation: vozOuvindo ? "pulse 1s infinite" : "none",
-              fontSize:"var(--fz-lg)"}}>🎙</button>
+            }}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                stroke={vozOuvindo ? "#f87171" : "#fbbf24"} strokeWidth="1.8"
+                strokeLinecap="round" strokeLinejoin="round">
+                <rect x="9" y="2" width="6" height="11" rx="3"/>
+                <path d="M5 10a7 7 0 0 0 14 0"/>
+                <line x1="12" y1="17" x2="12" y2="21"/>
+                <line x1="8" y1="21" x2="16" y2="21"/>
+              </svg>
+            </button>
             <button onClick={()=>setModal("filtro")} style={{...iconBtn,
               color:(filtros.cat.length||filtros.mercado||filtros.marca||filtros.busca)?"#fbbf24":"var(--text3)"}}>⊟</button>
           </div>
@@ -1438,8 +1458,14 @@ function App() {
             <input value={filtros.busca} onChange={e=>setFiltros(f=>({...f,busca:e.target.value}))}
               placeholder="buscar produto, marca…"
               style={{width:"100%",background:"var(--input)",border:"1px solid var(--border)",borderRadius:8,
-                padding:"7px 12px 7px 30px",color:"var(--text)",fontSize:"var(--fz)",outline:"none",
+                padding:"7px 30px 7px 30px",color:"var(--text)",fontSize:"var(--fz)",outline:"none",
                 boxSizing:"border-box",fontFamily:"inherit"}}/>
+            {filtros.busca&&(
+              <button onClick={()=>setFiltros(f=>({...f,busca:""}))}
+                style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",
+                  background:"none",border:"none",color:"var(--text3)",cursor:"pointer",
+                  fontSize:18,padding:"0 2px",fontFamily:"inherit",lineHeight:1}}>×</button>
+            )}
           </div>
         )}
       </div>
@@ -1669,7 +1695,22 @@ function App() {
                 boxShadow: vozOuvindo ? "0 0 0 8px #f8717133" : "0 4px 20px #fbbf2466",
                 animation: vozOuvindo ? "pulse 1s infinite" : "none",
               }}>
-              {vozOuvindo ? "⏹" : "🎙"}
+              {vozOuvindo ? (
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                  stroke="#0c0c0c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="6" y="6" width="12" height="12" rx="2"/>
+                </svg>
+              ) : (
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                  stroke="#0c0c0c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="9" y="2" width="6" height="11" rx="3"/>
+                  <path d="M5 10a7 7 0 0 0 14 0"/>
+                  <line x1="12" y1="17" x2="12" y2="21"/>
+                  <line x1="8" y1="21" x2="16" y2="21"/>
+                </svg>
+              )}
             </button>
             <div style={{fontSize:"var(--fz-sm)",color:"var(--text3)",marginTop:12}}>
               {vozOuvindo ? "Toque para parar" : "Toque para falar"}
