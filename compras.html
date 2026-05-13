@@ -845,6 +845,61 @@ function Rodape({compras,config,onPrint,onBuscar,buscando,buscandoNome,onVerLog,
   );
 }
 
+// ── ASSISTENTE DE VOZ ──
+async function interpretarComando(texto, compras, estoque, apiKey) {
+  if (!apiKey || !apiKey.startsWith("sk-ant-")) return null;
+  const listaCompras = compras.map(i => `${i.nome}${i.marca?" ("+i.marca+")":""}${i.preco?" R$"+i.preco:""}${i.qtd?" qtd:"+i.qtd:""}`).join(", ") || "vazia";
+  const listaEstoque = estoque.map(i => `${i.nome} (qtd:${i.qtdEstoque??0})`).join(", ") || "vazio";
+  const prompt = `Você é o assistente de controle de compras domésticas. Interprete o comando do usuário e retorne a ação a executar.
+
+Lista de compras atual: ${listaCompras}
+Estoque atual: ${listaEstoque}
+
+Comando do usuário: "${texto}"
+
+Responda SOMENTE com JSON válido. Identifique a ação e os dados necessários.
+Tipos de ação possíveis:
+- "reduzir_estoque": reduz quantidade de um item do estoque. Campos: nome, quantidade (padrão 1)
+- "aumentar_estoque": aumenta quantidade de um item do estoque. Campos: nome, quantidade (padrão 1)
+- "adicionar_compras": adiciona item na lista de compras. Campos: nome, quantidade, unidade, preco (opcional)
+- "marcar_comprado": marca item como comprado na lista. Campos: nome, preco (opcional - preço real pago)
+- "remover_compras": remove item da lista de compras. Campos: nome
+- "consultar": consulta informação. Campos: tipo ("estoque"|"compras"), nome (opcional)
+- "desconhecido": não entendeu o comando. Campos: mensagem explicando
+
+Se o nome do produto no comando for parecido mas diferente do que está na lista, inclua o campo "nome_original" com o nome exato da lista e "nome_novo" com o nome do comando, para perguntar ao usuário se deve substituir.
+
+Formato: {"acao": "string", "nome": "string", "quantidade": number, "unidade": "string", "preco": number|null, "nome_original": "string|null", "nome_novo": "string|null", "mensagem": "string"}`;
+
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true",
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 400,
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const text = data.content?.find(b => b.type === "text")?.text || "";
+    const start = text.indexOf("{");
+    if (start === -1) return null;
+    let depth = 0, jsonStr = null;
+    for (let i = start; i < text.length; i++) {
+      if (text[i] === "{") depth++;
+      else if (text[i] === "}") { depth--; if (depth === 0) { jsonStr = text.slice(start, i+1); break; } }
+    }
+    return jsonStr ? JSON.parse(jsonStr) : null;
+  } catch(e) { return null; }
+}
+
 // ── GOOGLE DRIVE SYNC ──
 const GOOGLE_CLIENT_ID = "556568463566-fca3135da3jcem30hv13m4nc82td9gel.apps.googleusercontent.com";
 const DRIVE_FILE_NAME = "compras-casa-sync.json";
@@ -948,6 +1003,12 @@ function App() {
   const [addTarget,setAddTarget] = useState("compras");
   const [driveStatus,setDriveStatus] = useState(""); // "", "conectando", "sincronizando", "ok", "erro"
   const [modalCamera, setModalCamera] = useState(false);
+  const [modalVoz, setModalVoz] = useState(false);
+  const [vozOuvindo, setVozOuvindo] = useState(false);
+  const [vozTexto, setVozTexto] = useState("");
+  const [vozStatus, setVozStatus] = useState(""); // mensagem de status/resultado
+  const [vozPendente, setVozPendente] = useState(null); // ação pendente de confirmação
+  const recognitionRef = React.useRef(null);
   const [analisando, setAnalisando] = useState(false);
   const [produtosIdentificados, setProdutosIdentificados] = useState([]);
   const [produtosSelecionados, setProdutosSelecionados] = useState({});
@@ -1175,6 +1236,99 @@ function App() {
     setProdutosSelecionados({});
   };
 
+  const iniciarVoz = () => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) {
+      setVozStatus("Reconhecimento de voz não suportado neste navegador.");
+      return;
+    }
+    const rec = new SR();
+    rec.lang = "pt-BR";
+    rec.continuous = false;
+    rec.interimResults = false;
+    recognitionRef.current = rec;
+    rec.onstart = () => { setVozOuvindo(true); setVozStatus("Ouvindo..."); setVozTexto(""); };
+    rec.onresult = async (e) => {
+      const texto = e.results[0][0].transcript;
+      setVozTexto(texto);
+      setVozOuvindo(false);
+      setVozStatus("Interpretando...");
+      const acao = await interpretarComando(texto, compras, estoque, config.apiKey);
+      if (!acao) { setVozStatus("Não entendi. Tente novamente."); return; }
+      await executarAcaoVoz(acao);
+    };
+    rec.onerror = (e) => { setVozOuvindo(false); setVozStatus("Erro: " + e.error); };
+    rec.onend = () => setVozOuvindo(false);
+    rec.start();
+  };
+
+  const pararVoz = () => { recognitionRef.current?.stop(); setVozOuvindo(false); };
+
+  const executarAcaoVoz = async (acao) => {
+    const nomeLower = (acao.nome||"").toLowerCase();
+    switch(acao.acao) {
+      case "reduzir_estoque": {
+        const item = estoque.find(i => i.nome.toLowerCase().includes(nomeLower) || nomeLower.includes(i.nome.toLowerCase()));
+        if (!item) { setVozStatus(`"${acao.nome}" não encontrado no estoque.`); return; }
+        if (acao.nome_original && acao.nome_novo) { setVozPendente(acao); setVozStatus(`Substituir "${acao.nome_original}" por "${acao.nome_novo}"?`); return; }
+        const novaQtd = Math.max(0, (item.qtdEstoque||0) - (acao.quantidade||1));
+        atualizarItem(item.id, {qtdEstoque: novaQtd}, "estoque");
+        setVozStatus(`✓ ${item.nome}: ${item.qtdEstoque||0} → ${novaQtd}`);
+        break;
+      }
+      case "aumentar_estoque": {
+        const item = estoque.find(i => i.nome.toLowerCase().includes(nomeLower) || nomeLower.includes(i.nome.toLowerCase()));
+        if (!item) { setVozStatus(`"${acao.nome}" não encontrado no estoque.`); return; }
+        const novaQtd = (item.qtdEstoque||0) + (acao.quantidade||1);
+        atualizarItem(item.id, {qtdEstoque: novaQtd}, "estoque");
+        setVozStatus(`✓ ${item.nome}: ${item.qtdEstoque||0} → ${novaQtd}`);
+        break;
+      }
+      case "adicionar_compras": {
+        const novoItem = {
+          id: uid(), nome: acao.nome, qtd: acao.quantidade||1,
+          unidade: acao.unidade||"un", categoria: "outros",
+          marca: "", preco: acao.preco||null,
+          mercado_nome: "", comprado: false, adicionadoEm: Date.now(),
+        };
+        setCompras(p => [...p, novoItem]);
+        setVozStatus(`✓ "${acao.nome}" adicionado em compras.`);
+        break;
+      }
+      case "marcar_comprado": {
+        const item = compras.find(i => i.nome.toLowerCase().includes(nomeLower) || nomeLower.includes(i.nome.toLowerCase()));
+        if (acao.nome_original && acao.nome_novo) { setVozPendente(acao); setVozStatus(`"${acao.nome_original}" na lista. Substituir nome por "${acao.nome_novo}"?`); return; }
+        if (!item) { setVozStatus(`"${acao.nome}" não encontrado na lista de compras.`); return; }
+        const patch = {comprado: true};
+        if (acao.preco) patch.preco = acao.preco;
+        atualizarItem(item.id, patch, "compras");
+        setVozStatus(`✓ "${item.nome}" marcado como comprado${acao.preco ? " por "+fmt(acao.preco) : ""}.`);
+        break;
+      }
+      case "remover_compras": {
+        const item = compras.find(i => i.nome.toLowerCase().includes(nomeLower) || nomeLower.includes(i.nome.toLowerCase()));
+        if (!item) { setVozStatus(`"${acao.nome}" não encontrado na lista.`); return; }
+        setCompras(p => p.filter(i => i.id !== item.id));
+        setVozStatus(`✓ "${item.nome}" removido da lista.`);
+        break;
+      }
+      case "consultar": {
+        if (acao.tipo === "estoque") {
+          const item = acao.nome ? estoque.find(i => i.nome.toLowerCase().includes(nomeLower)) : null;
+          setVozStatus(item ? `${item.nome}: ${item.qtdEstoque||0} ${item.unidade||"un"} em estoque.` : `${estoque.length} itens no estoque.`);
+        } else {
+          setVozStatus(`${compras.filter(i=>!i.comprado).length} itens pendentes na lista de compras.`);
+        }
+        break;
+      }
+      default:
+        setVozStatus(acao.mensagem || "Não entendi o comando. Tente novamente.");
+    }
+  };
+
+  const confirmarAcaoVoz = () => { if (vozPendente) { const a = {...vozPendente, nome: vozPendente.nome_original, nome_original: null, nome_novo: null}; executarAcaoVoz(a); setVozPendente(null); } };
+  const recusarAcaoVoz = () => { setVozPendente(null); setVozStatus("Cancelado."); };
+
   const buscarTodos = async () => {
     if(!config.apiKey?.startsWith("sk-ant-")){
       alert("Configure a chave API em Config → Pesquisa de preços.");
@@ -1256,6 +1410,10 @@ function App() {
             {driveStatus==="sincronizando"&&<div style={{fontSize:"var(--fz-xs)",color:"#60a5fa",animation:"pulse 1s infinite"}}>↑ Drive</div>}
             {driveStatus==="ok"&&<div style={{fontSize:"var(--fz-xs)",color:"#4ade80"}}>✓ Drive</div>}
             {driveStatus==="erro"&&<div style={{fontSize:"var(--fz-xs)",color:"#f87171"}}>✗ Drive</div>}
+            <button onClick={()=>setModalVoz(true)} style={{...iconBtn,
+              color: vozOuvindo ? "#f87171" : "var(--text3)",
+              animation: vozOuvindo ? "pulse 1s infinite" : "none",
+              fontSize:"var(--fz-lg)"}}>🎙</button>
             <button onClick={()=>setModal("filtro")} style={{...iconBtn,
               color:(filtros.cat.length||filtros.mercado||filtros.marca||filtros.busca)?"#fbbf24":"var(--text3)"}}>⊟</button>
           </div>
@@ -1495,6 +1653,69 @@ function App() {
           </button>
           <button onClick={()=>{setProdutosIdentificados([]);setProdutosSelecionados({});}}
             style={btnSec}>Cancelar</button>
+        </Modal>
+      )}
+
+      {/* MODAL ASSISTENTE DE VOZ */}
+      {modalVoz&&(
+        <Modal onClose={()=>{setModalVoz(false);pararVoz();}} title="Assistente de voz">
+          <div style={{textAlign:"center",padding:"10px 0 20px"}}>
+            <button
+              onClick={vozOuvindo ? pararVoz : iniciarVoz}
+              style={{
+                width:80,height:80,borderRadius:40,border:"none",cursor:"pointer",
+                background: vozOuvindo ? "#f87171" : "#fbbf24",
+                fontSize:32,transition:"all .2s",
+                boxShadow: vozOuvindo ? "0 0 0 8px #f8717133" : "0 4px 20px #fbbf2466",
+                animation: vozOuvindo ? "pulse 1s infinite" : "none",
+              }}>
+              {vozOuvindo ? "⏹" : "🎙"}
+            </button>
+            <div style={{fontSize:"var(--fz-sm)",color:"var(--text3)",marginTop:12}}>
+              {vozOuvindo ? "Toque para parar" : "Toque para falar"}
+            </div>
+          </div>
+
+          {vozTexto&&(
+            <div style={{background:"var(--bg2)",borderRadius:8,padding:"10px 14px",marginBottom:12,
+              border:"1px solid var(--border)"}}>
+              <div style={{fontSize:"var(--fz-xs)",color:"var(--text3)",marginBottom:4}}>Você disse:</div>
+              <div style={{fontSize:"var(--fz)",color:"var(--text)",fontStyle:"italic"}}>"{vozTexto}"</div>
+            </div>
+          )}
+
+          {vozStatus&&(
+            <div style={{background: vozStatus.startsWith("✓")?"#4ade8011":"var(--bg2)",
+              borderRadius:8,padding:"10px 14px",marginBottom:12,
+              border:`1px solid ${vozStatus.startsWith("✓")?"#4ade8044":"var(--border)"}`}}>
+              <div style={{fontSize:"var(--fz)",color: vozStatus.startsWith("✓")?"#4ade80":"var(--text)"}}>
+                {vozStatus}
+              </div>
+            </div>
+          )}
+
+          {vozPendente&&(
+            <div style={{display:"flex",gap:8,marginBottom:12}}>
+              <button onClick={confirmarAcaoVoz} style={{flex:1,padding:"10px",background:"#fbbf24",
+                border:"none",borderRadius:8,color:"#0c0c0c",fontWeight:700,
+                fontSize:"var(--fz-sm)",cursor:"pointer",fontFamily:"inherit"}}>
+                Sim, substituir
+              </button>
+              <button onClick={recusarAcaoVoz} style={{flex:1,padding:"10px",background:"var(--bg3)",
+                border:"none",borderRadius:8,color:"var(--text)",
+                fontSize:"var(--fz-sm)",cursor:"pointer",fontFamily:"inherit"}}>
+                Não
+              </button>
+            </div>
+          )}
+
+          <div style={{fontSize:"var(--fz-xs)",color:"var(--text3)",lineHeight:1.7,marginTop:8}}>
+            Exemplos de comandos:<br/>
+            "Peguei um pacote de papel higiênico"<br/>
+            "Acrescente farinha Panco 500g a R$ 23"<br/>
+            "Coloquei no carrinho açúcar cristal"<br/>
+            "Quantos itens tenho no estoque?"
+          </div>
         </Modal>
       )}
 
