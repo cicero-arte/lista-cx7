@@ -726,9 +726,8 @@ function CatEditor({cats,onChange}) {
   const adicionar = () => {
     if(!novaLabel.trim()) return;
     const key = novaLabel.toLowerCase().replace(/\s+/g,"_").replace(/[^a-z0-9_]/g,"") + "_" + Date.now();
-    const cores = CORES_OPCOES;
-    const cor = cores[Object.keys(cats).length % cores.length];
-    onChange({...cats,[key]:{label:novaLabel.trim(),emoji:novaEmoji,cor}});
+    const cor = CORES_OPCOES[Object.keys(cats).length % CORES_OPCOES.length];
+    onChange({...cats,[key]:{label:novaLabel.trim(),emoji:"",cor}});
     setNovaLabel("");
   };
 
