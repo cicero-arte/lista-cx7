@@ -13,7 +13,6 @@
 <link rel="apple-touch-icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAADACAIAAADdvvtQAAACZklEQVR42u3bwY0CQQxFwQmAMMg/BQLjwo0TEjR8o3G7nnxFsqZLLNuI4yL90OERCCABJIAEkASQABJAAkgCSAAJIAEkASSABJAAkgASQAJIAAkgCSABJIAEkASQABJAAkgCSAAJIAEkASSABJAAEkASQM/ut2u7AQgggAACCCCAAAIIIIAAAggggAACqIaOrQACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAmgmoI4/aPcze4AAAsgABBBAAAEEEEAAGYAMQAABBBBAAAEEkAEIIIAAAggggAAyAAEEEEAAAQQQQAYggAACCCCAAALIAGQAAggggAACCCCADEAAAQQQQAABBJABCCCAAAIIIIAAMgABBBBAAAEEEEAGIGcPEEAAAQQQQAABZAACCCCAAAIIIIAMQAABBBBAAAEEkAEIIIAAAggggAAyAAEEEEAAAQQQQAYgAxBAAAEEEEAAAWQA0s4BJIDe/XG0FUDJj1O2AijwSXz4VgAF/o8buxVAsVuAgVsBFL5DGrUVQOFzKjqtjleCEwGd8wK377UyQK/P4ISA/r8VQGvnlHrJHlsBtPbc46/qvhVACw+97oV9twIIIIAAAmgDPaWndc6tAPIOBBBAAAEEkHsg90AAffDQ3UQDFDgt34UBFDgq38YDVH5aQ7YCqOS0Rm0FUPi0Bm4FUOy0xm4FUOC0hm8F0PcHZiuA1k7OVgAJIAEkASSABJAAkgASQAJIAAkgCSABJIAEkASQABJA2rYHaCIOWCgh+YkAAAAASUVORK5CYII=">
 <link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22Compras+Casa%22%2C%22short_name%22%3A%22Compras%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%230c0c0c%22%2C%22theme_color%22%3A%22%23fbbf24%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAADACAIAAADdvvtQAAACZklEQVR42u3bwY0CQQxFwQmAMMg/BQLjwo0TEjR8o3G7nnxFsqZLLNuI4yL90OERCCABJIAEkASQABJAAkgCSAAJIAEkASSABJAAkgASQAJIAAkgCSABJIAEkASQABJAAkgCSAAJIAEkASSABJAAEkASQM/ut2u7AQgggAACCCCAAAIIIIAAAggggAACqIaOrQACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAmgmoI4/aPcze4AAAsgABBBAAAEEEEAAGYAMQAABBBBAAAEEkAEIIIAAAggggAAyAAEEEEAAAQQQQAYggAACCCCAAALIAGQAAggggAACCCCADEAAAQQQQAABBJABCCCAAAIIIIAAMgABBBBAAAEEEEAGIGcPEEAAAQQQQAABZAACCCCAAAIIIIAMQAABBBBAAAEEkAEIIIAAAggggAAyAAEEEEAAAQQQQAYgAxBAAAEEEEAAAWQA0s4BJIDe/XG0FUDJj1O2AijwSXz4VgAF/o8buxVAsVuAgVsBFL5DGrUVQOFzKjqtjleCEwGd8wK377UyQK/P4ISA/r8VQGvnlHrJHlsBtPbc46/qvhVACw+97oV9twIIIIAAAmgDPaWndc6tAPIOBBBAAAEEkHsg90AAffDQ3UQDFDgt34UBFDgq38YDVH5aQ7YCqOS0Rm0FUPi0Bm4FUOy0xm4FUOC0hm8F0PcHZiuA1k7OVgAJIAEkASSABJAAkgASQAJIAAkgCSABJIAEkASQABJA2rYHaCIOWCgh+YkAAAAASUVORK5CYII=%22%2C%22sizes%22%3A%22192x192%22%2C%22type%22%3A%22image%2Fpng%22%7D%5D%7D">
 <title>Compras Casa</title>
-<script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
@@ -933,42 +932,29 @@ Responda SOMENTE com JSON: {"acao":"string","nome":"string","quantidade":number,
 
 // ── FIREBASE SYNC ──
 const db = firebase.database();
+const auth = firebase.auth();
 
 const EMAILS_PERMITIDOS = ["cicero.arte@gmail.com", "marciliacampos@gmail.com"];
-const GOOGLE_CLIENT_ID = "695232639555-tf0aktqsgfttmmnag1elhbvs9d3bs3mj.apps.googleusercontent.com";
 
-let _fbUser = null;
-
-async function fbLoginComGIS() {
-  return new Promise((resolve, reject) => {
-    const client = google.accounts.oauth2.initTokenClient({
-      client_id: GOOGLE_CLIENT_ID,
-      scope: "email profile",
-      callback: async (response) => {
-        if (response.error) { reject(new Error(response.error)); return; }
-        try {
-          const credential = firebase.auth.GoogleAuthProvider.credential(null, response.access_token);
-          const result = await firebase.auth().signInWithCredential(credential);
-          const email = result.user.email;
-          if (!EMAILS_PERMITIDOS.includes(email)) {
-            await firebase.auth().signOut();
-            reject(new Error("Acesso não autorizado para " + email));
-            return;
-          }
-          resolve(result.user);
-        } catch(e) { reject(e); }
-      },
-    });
-    client.requestAccessToken({ prompt: "select_account" });
-  });
+async function fbLogin(email, senha) {
+  const result = await auth.signInWithEmailAndPassword(email, senha);
+  if (!EMAILS_PERMITIDOS.includes(result.user.email)) {
+    await auth.signOut();
+    throw new Error("Acesso não autorizado.");
+  }
+  return result.user;
 }
 
 async function fbLogout() {
-  await firebase.auth().signOut();
+  await auth.signOut();
+}
+
+async function fbRecuperarSenha(email) {
+  await auth.sendPasswordResetEmail(email);
 }
 
 function fbSalvar(dados) {
-  const user = firebase.auth().currentUser;
+  const user = auth.currentUser;
   if (!user) return Promise.resolve();
   const configSemApiKey = {...(dados.config||{})};
   delete configSemApiKey.apiKey;
@@ -1035,17 +1021,7 @@ function App() {
 
   // Observar estado de autenticação Firebase
   useEffect(()=>{
-    // Tratar retorno do redirect (mobile/Safari)
-    firebase.auth().getRedirectResult().then(result => {
-      if (result && result.user) {
-        const email = result.user.email;
-        if (!EMAILS_PERMITIDOS.includes(email)) {
-          firebase.auth().signOut();
-        }
-      }
-    }).catch(e => console.error("redirect result:", e));
-
-    const unsub = firebase.auth().onAuthStateChanged(user => {
+    const unsub = auth.onAuthStateChanged(user => {
       if (user && EMAILS_PERMITIDOS.includes(user.email)) {
         setFbUser(user);
         setFbConectado(true);
@@ -1058,7 +1034,7 @@ function App() {
             if (val.config) setConfig(c => ({...c, ...val.config, apiKey: c.apiKey}));
           }
         });
-        // Depois ouvir mudanças em tempo real
+        // Ouvir mudanças em tempo real
         fbOuvir((dados) => {
           if (ignorarProximaAtualizacao.current) {
             ignorarProximaAtualizacao.current = false;
@@ -1203,17 +1179,43 @@ function App() {
     }).catch(() => setFbSincStatus("erro"));
   };
 
-  const conectarFirebase = async () => {
-    setFbSincStatus("conectando");
+  const [modalLogin, setModalLogin] = useState(false);
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginSenha, setLoginSenha] = useState("");
+  const [loginErro, setLoginErro] = useState("");
+  const [loginCarregando, setLoginCarregando] = useState(false);
+  const [recuperandoSenha, setRecuperandoSenha] = useState(false);
+
+  const conectarFirebase = () => {
+    setLoginErro("");
+    setModalLogin(true);
+  };
+
+  const fazerLogin = async () => {
+    setLoginCarregando(true);
+    setLoginErro("");
     try {
-      await fbLoginComGIS();
-      setFbSincStatus("ok");
-      setTimeout(() => setFbSincStatus(""), 2000);
+      await fbLogin(loginEmail, loginSenha);
+      setModalLogin(false);
+      setLoginSenha("");
     } catch(e) {
-      console.error(e);
-      setFbSincStatus("erro");
-      alert(e.message || "Erro ao conectar. Tente novamente.");
+      setLoginErro("Email ou senha incorretos.");
     }
+    setLoginCarregando(false);
+  };
+
+  const recuperarSenha = async () => {
+    if (!loginEmail) { setLoginErro("Digite seu email primeiro."); return; }
+    setLoginCarregando(true);
+    try {
+      await fbRecuperarSenha(loginEmail);
+      setLoginErro("");
+      alert("Email de recuperação enviado para " + loginEmail);
+      setRecuperandoSenha(false);
+    } catch(e) {
+      setLoginErro("Email não encontrado.");
+    }
+    setLoginCarregando(false);
   };
 
   const desconectarFirebase = async () => {
@@ -1809,6 +1811,47 @@ function App() {
             "Coloquei no carrinho açúcar cristal"<br/>
             "Quantos itens tenho no estoque?"
           </div>
+        </Modal>
+      )}
+
+      {/* MODAL LOGIN */}
+      {modalLogin&&(
+        <Modal onClose={()=>{setModalLogin(false);setLoginErro("");}} title="Entrar">
+          <Inp label="Email" value={loginEmail} onChange={e=>setLoginEmail(e.target.value)}
+            placeholder="seu@email.com" type="email"/>
+          {!recuperandoSenha && (
+            <Inp label="Senha" value={loginSenha} onChange={e=>setLoginSenha(e.target.value)}
+              placeholder="••••••" type="password"/>
+          )}
+          {loginErro&&(
+            <div style={{color:"#f87171",fontSize:"var(--fz-sm)",marginBottom:12}}>{loginErro}</div>
+          )}
+          {!recuperandoSenha ? (
+            <>
+              <button onClick={fazerLogin} disabled={loginCarregando||!loginEmail||!loginSenha}
+                style={{...btnPri,marginBottom:10,opacity:loginCarregando||!loginEmail||!loginSenha?0.5:1}}>
+                {loginCarregando?"Entrando...":"Entrar"}
+              </button>
+              <button onClick={()=>{setRecuperandoSenha(true);setLoginErro("");}}
+                style={{...btnSec,fontSize:"var(--fz-sm)"}}>
+                Esqueci minha senha
+              </button>
+            </>
+          ) : (
+            <>
+              <p style={{fontSize:"var(--fz-sm)",color:"var(--text3)",marginBottom:12}}>
+                Digite seu email acima e enviaremos um link para redefinir sua senha.
+              </p>
+              <button onClick={recuperarSenha} disabled={loginCarregando||!loginEmail}
+                style={{...btnPri,marginBottom:10,opacity:loginCarregando||!loginEmail?0.5:1}}>
+                {loginCarregando?"Enviando...":"Enviar email de recuperação"}
+              </button>
+              <button onClick={()=>{setRecuperandoSenha(false);setLoginErro("");}}
+                style={{...btnSec,fontSize:"var(--fz-sm)"}}>
+                Voltar ao login
+              </button>
+            </>
+          )}
         </Modal>
       )}
 
