@@ -949,10 +949,12 @@ async function fbLogout() {
 function fbSalvar(dados) {
   const user = auth.currentUser;
   if (!user) return;
+  const configSemApiKey = {...(dados.config||{})};
+  delete configSemApiKey.apiKey;
   return db.ref("dados").set({
     compras: dados.compras || [],
     estoque: dados.estoque || [],
-    config: dados.config || {},
+    config: configSemApiKey,
     atualizadoEm: Date.now(),
     atualizadoPor: user.email,
   });
@@ -1016,7 +1018,16 @@ function App() {
       if (user && EMAILS_PERMITIDOS.includes(user.email)) {
         setFbUser(user);
         setFbConectado(true);
-        // Começar a ouvir mudanças em tempo real
+        // Carregar dados imediatamente ao logar
+        db.ref("dados").once("value").then(snap => {
+          const val = snap.val();
+          if (val) {
+            if (val.compras) setCompras(val.compras);
+            if (val.estoque) setEstoque(val.estoque);
+            if (val.config) setConfig(c => ({...c, ...val.config, apiKey: c.apiKey}));
+          }
+        });
+        // Depois ouvir mudanças em tempo real
         fbOuvir((dados) => {
           if (ignorarProximaAtualizacao.current) {
             ignorarProximaAtualizacao.current = false;
