@@ -13,11 +13,24 @@
 <link rel="apple-touch-icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAADACAIAAADdvvtQAAACZklEQVR42u3bwY0CQQxFwQmAMMg/BQLjwo0TEjR8o3G7nnxFsqZLLNuI4yL90OERCCABJIAEkASQABJAAkgCSAAJIAEkASSABJAAkgASQAJIAAkgCSABJIAEkASQABJAAkgCSAAJIAEkASSABJAAEkASQM/ut2u7AQgggAACCCCAAAIIIIAAAggggAACqIaOrQACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAmgmoI4/aPcze4AAAsgABBBAAAEEEEAAGYAMQAABBBBAAAEEkAEIIIAAAggggAAyAAEEEEAAAQQQQAYggAACCCCAAALIAGQAAggggAACCCCADEAAAQQQQAABBJABCCCAAAIIIIAAMgABBBBAAAEEEEAGIGcPEEAAAQQQQAABZAACCCCAAAIIIIAMQAABBBBAAAEEkAEIIIAAAggggAAyAAEEEEAAAQQQQAYgAxBAAAEEEEAAAWQA0s4BJIDe/XG0FUDJj1O2AijwSXz4VgAF/o8buxVAsVuAgVsBFL5DGrUVQOFzKjqtjleCEwGd8wK377UyQK/P4ISA/r8VQGvnlHrJHlsBtPbc46/qvhVACw+97oV9twIIIIAAAmgDPaWndc6tAPIOBBBAAAEEkHsg90AAffDQ3UQDFDgt34UBFDgq38YDVH5aQ7YCqOS0Rm0FUPi0Bm4FUOy0xm4FUOC0hm8F0PcHZiuA1k7OVgAJIAEkASSABJAAkgASQAJIAAkgCSABJIAEkASQABJA2rYHaCIOWCgh+YkAAAAASUVORK5CYII=">
 <link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22Compras+Casa%22%2C%22short_name%22%3A%22Compras%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%230c0c0c%22%2C%22theme_color%22%3A%22%23fbbf24%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAADACAIAAADdvvtQAAACZklEQVR42u3bwY0CQQxFwQmAMMg/BQLjwo0TEjR8o3G7nnxFsqZLLNuI4yL90OERCCABJIAEkASQABJAAkgCSAAJIAEkASSABJAAkgASQAJIAAkgCSABJIAEkASQABJAAkgCSAAJIAEkASSABJAAEkASQM/ut2u7AQgggAACCCCAAAIIIIAAAggggAACqIaOrQACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAmgmoI4/aPcze4AAAsgABBBAAAEEEEAAGYAMQAABBBBAAAEEkAEIIIAAAggggAAyAAEEEEAAAQQQQAYggAACCCCAAALIAGQAAggggAACCCCADEAAAQQQQAABBJABCCCAAAIIIIAAMgABBBBAAAEEEEAGIGcPEEAAAQQQQAABZAACCCCAAAIIIIAMQAABBBBAAAEEkAEIIIAAAggggAAyAAEEEEAAAQQQQAYgAxBAAAEEEEAAAWQA0s4BJIDe/XG0FUDJj1O2AijwSXz4VgAF/o8buxVAsVuAgVsBFL5DGrUVQOFzKjqtjleCEwGd8wK377UyQK/P4ISA/r8VQGvnlHrJHlsBtPbc46/qvhVACw+97oV9twIIIIAAAmgDPaWndc6tAPIOBBBAAAEEkHsg90AAffDQ3UQDFDgt34UBFDgq38YDVH5aQ7YCqOS0Rm0FUPi0Bm4FUOy0xm4FUOC0hm8F0PcHZiuA1k7OVgAJIAEkASSABJAAkgASQAJIAAkgCSABJIAEkASQABJA2rYHaCIOWCgh+YkAAAAASUVORK5CYII=%22%2C%22sizes%22%3A%22192x192%22%2C%22type%22%3A%22image%2Fpng%22%7D%5D%7D">
 <title>Compras Casa</title>
-<script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="https://apis.google.com/js/api.js" async defer></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyAG2-SvxtzVrYJACYI5bNQL2cBqkxcRmTA",
+    authDomain: "compras-60e24.firebaseapp.com",
+    databaseURL: "https://compras-60e24-default-rtdb.firebaseio.com",
+    projectId: "compras-60e24",
+    storageBucket: "compras-60e24.firebasestorage.app",
+    messagingSenderId: "695232639555",
+    appId: "1:695232639555:web:09469268d25c28360e5af6"
+  };
+  firebase.initializeApp(firebaseConfig);
+</script>
 <style>
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   input[type=number]::-webkit-outer-spin-button,
@@ -551,7 +564,7 @@ function DetalheModal({item,onClose,onUpdate,config}) {
 }
 
 // ── CONFIG PANE ──
-function ConfigPane({config,setConfig,onSincChange,onClearCompras,onClearEstoque,onBackup,onRestore,onPrintCompras,onPrintEstoque,driveConectado,onConectarDrive,onSincronizarDrive}) {
+function ConfigPane({config,setConfig,onSincChange,onClearCompras,onClearEstoque,onBackup,onRestore,onPrintCompras,onPrintEstoque,driveConectado,onConectarFirebase,onDesconectarFirebase}) {
   const upd = (k,v) => setConfig(c=>({...c,[k]:v}));
   const [conf,setConf] = useState(null);
   return (
@@ -662,23 +675,23 @@ function ConfigPane({config,setConfig,onSincChange,onClearCompras,onClearEstoque
         )}
       </Section>
 
-      <Section title="Sincronização Google Drive">
+      <Section title="Sincronização em tempo real">
         <div style={{background:"var(--bg2)",borderRadius:8,padding:"12px",border:"1px solid var(--border)",marginBottom:10}}>
           <div style={{fontSize:"var(--fz-sm)",color:"var(--text)",marginBottom:6}}>
-            {driveConectado ? "✓ Conectado ao Google Drive" : "Sincronize a lista entre seus dispositivos via Google Drive."}
+            {driveConectado ? `✓ Conectado como ${driveConectado}` : "Sincronize em tempo real entre seus dispositivos."}
           </div>
           <div style={{fontSize:"var(--fz-xs)",color:"var(--text3)",marginBottom:10,lineHeight:1.6}}>
             {driveConectado
-              ? "Os dados são salvos automaticamente. Use o mesmo app em outro dispositivo e conecte para sincronizar."
-              : "Ao conectar, os dados do Drive serão carregados e qualquer alteração será salva automaticamente."}
+              ? "Qualquer alteração aparece automaticamente em todos os dispositivos conectados."
+              : "Entre com sua conta Google para sincronizar com o celular da sua esposa em tempo real."}
           </div>
           {!driveConectado ? (
-            <button onClick={onConectarDrive} style={{...btnSec,color:"#60a5fa",borderColor:"#60a5fa44"}}>
-              Conectar ao Google Drive
+            <button onClick={onConectarFirebase} style={{...btnSec,color:"#60a5fa",borderColor:"#60a5fa44"}}>
+              Entrar com Google
             </button>
           ) : (
-            <button onClick={onSincronizarDrive} style={{...btnSec,color:"#4ade80",borderColor:"#4ade8044"}}>
-              Sincronizar agora
+            <button onClick={onDesconectarFirebase} style={{...btnSec,color:"#f87171",borderColor:"#f8717144"}}>
+              Sair da conta
             </button>
           )}
         </div>
@@ -912,91 +925,48 @@ Responda SOMENTE com JSON: {"acao":"string","nome":"string","quantidade":number,
   } catch(e) { return null; }
 }
 
-// ── GOOGLE DRIVE SYNC ──
-const GOOGLE_CLIENT_ID = "556568463566-fca3135da3jcem30hv13m4nc82td9gel.apps.googleusercontent.com";
-const DRIVE_FILE_NAME = "compras-casa-sync.json";
-const SCOPES = "https://www.googleapis.com/auth/drive.appdata";
+// ── FIREBASE SYNC ──
+const auth = firebase.auth();
+const db = firebase.database();
+const googleProvider = new firebase.auth.GoogleAuthProvider();
 
-let gapiReady = false;
-let tokenClient = null;
+const EMAILS_PERMITIDOS = ["cicero.arte@gmail.com", "marciliacampo@gmail.com"];
 
-function initGapi(callback) {
-  if (gapiReady) { callback(); return; }
-  gapi.load("client", async () => {
-    await gapi.client.init({});
-    await gapi.client.load("https://www.googleapis.com/discovery/v1/apis/drive/v3/rest");
-    gapiReady = true;
-    callback();
+async function fbLogin() {
+  const result = await auth.signInWithPopup(googleProvider);
+  const email = result.user.email;
+  if (!EMAILS_PERMITIDOS.includes(email)) {
+    await auth.signOut();
+    throw new Error("Acesso não autorizado para " + email);
+  }
+  return result.user;
+}
+
+async function fbLogout() {
+  await auth.signOut();
+}
+
+function fbSalvar(dados) {
+  const user = auth.currentUser;
+  if (!user) return;
+  return db.ref("dados").set({
+    compras: dados.compras || [],
+    estoque: dados.estoque || [],
+    config: dados.config || {},
+    atualizadoEm: Date.now(),
+    atualizadoPor: user.email,
   });
 }
 
-function getTokenAndRun(callback) {
-  if (!tokenClient) {
-    tokenClient = google.accounts.oauth2.initTokenClient({
-      client_id: GOOGLE_CLIENT_ID,
-      scope: SCOPES,
-      callback: (resp) => {
-        if (resp.error) { console.error(resp); return; }
-        callback();
-      },
-    });
-  }
-  if (gapi.client.getToken() === null) {
-    tokenClient.requestAccessToken({ prompt: "consent" });
-  } else {
-    callback();
-  }
-}
-
-async function getDriveFileId() {
-  const res = await gapi.client.drive.files.list({
-    spaces: "appDataFolder",
-    fields: "files(id,name)",
-    q: `name='${DRIVE_FILE_NAME}'`,
+function fbOuvir(callback) {
+  return db.ref("dados").on("value", (snap) => {
+    const val = snap.val();
+    if (val) callback(val);
   });
-  const files = res.result.files;
-  return files && files.length > 0 ? files[0].id : null;
 }
 
-async function saveToDrive(data) {
-  const body = JSON.stringify(data);
-  const fileId = await getDriveFileId();
-  if (fileId) {
-    await gapi.client.request({
-      path: `/upload/drive/v3/files/${fileId}`,
-      method: "PATCH",
-      params: { uploadType: "media" },
-      body,
-    });
-  } else {
-    await gapi.client.request({
-      path: "/upload/drive/v3/files",
-      method: "POST",
-      params: { uploadType: "multipart" },
-      headers: { "Content-Type": 'multipart/related; boundary="boundary"' },
-      body: [
-        '--boundary',
-        'Content-Type: application/json',
-        '',
-        JSON.stringify({ name: DRIVE_FILE_NAME, parents: ["appDataFolder"] }),
-        '--boundary',
-        'Content-Type: application/json',
-        '',
-        body,
-        '--boundary--',
-      ].join("\r\n"),
-    });
-  }
-}
-
-async function loadFromDrive() {
-  const fileId = await getDriveFileId();
-  if (!fileId) return null;
-  const res = await gapi.client.drive.files.get({
-    fileId,
-    alt: "media",
-  });
-  return typeof res.result === "string" ? JSON.parse(res.result) : res.result;
+function fbPararOuvir() {
+  db.ref("dados").off();
 }
 
 // ── MAIN APP ──
@@ -1013,7 +983,7 @@ function App() {
   const [addNome,setAddNome] = useState("");
   const [addQtd,setAddQtd]   = useState("1");
   const [addTarget,setAddTarget] = useState("compras");
-  const [driveStatus,setDriveStatus] = useState(""); // "", "conectando", "sincronizando", "ok", "erro"
+  const [driveStatus,setDriveStatus] = useState(""); // reutilizado para status Firebase
   const [modalCamera, setModalCamera] = useState(false);
   const [modalVoz, setModalVoz] = useState(false);
   const [vozOuvindo, setVozOuvindo] = useState(false);
@@ -1024,7 +994,10 @@ function App() {
   const [analisando, setAnalisando] = useState(false);
   const [produtosIdentificados, setProdutosIdentificados] = useState([]);
   const [produtosSelecionados, setProdutosSelecionados] = useState({});
-  const [driveConectado,setDriveConectado] = useState(false);
+  const [fbUser, setFbUser] = useState(null);
+  const [fbConectado, setFbConectado] = useState(false);
+  const [fbSincStatus, setFbSincStatus] = useState(""); // "", "conectando", "sincronizando", "ok", "erro"
+  const ignorarProximaAtualizacao = React.useRef(false);
 
   useEffect(()=>{LS.set("cfg_v1",config);},[config]);
   useEffect(()=>{
@@ -1036,6 +1009,46 @@ function App() {
   },[config.categorias]);
   useEffect(()=>{LS.set("compras_v3",compras);},[compras]);
   useEffect(()=>{LS.set("estoque_v1",estoque);},[estoque]);
+
+  // Observar estado de autenticação Firebase
+  useEffect(()=>{
+    const unsub = auth.onAuthStateChanged(user => {
+      if (user && EMAILS_PERMITIDOS.includes(user.email)) {
+        setFbUser(user);
+        setFbConectado(true);
+        // Começar a ouvir mudanças em tempo real
+        fbOuvir((dados) => {
+          if (ignorarProximaAtualizacao.current) {
+            ignorarProximaAtualizacao.current = false;
+            return;
+          }
+          if (dados.compras) setCompras(dados.compras);
+          if (dados.estoque) setEstoque(dados.estoque);
+          if (dados.config) setConfig(c => ({...c, ...dados.config, apiKey: c.apiKey}));
+          setFbSincStatus("ok");
+          setTimeout(() => setFbSincStatus(""), 2000);
+        });
+      } else {
+        setFbUser(null);
+        setFbConectado(false);
+        fbPararOuvir();
+      }
+    });
+    return () => { unsub(); fbPararOuvir(); };
+  }, []);
+
+  // Auto-salvar no Firebase quando dados mudam
+  useEffect(()=>{
+    if (!fbConectado) return;
+    const t = setTimeout(() => {
+      ignorarProximaAtualizacao.current = true;
+      setFbSincStatus("sincronizando");
+      fbSalvar({ compras, estoque, config })
+        .then(() => { setFbSincStatus("ok"); setTimeout(() => setFbSincStatus(""), 2000); })
+        .catch(() => { setFbSincStatus("erro"); ignorarProximaAtualizacao.current = false; });
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [compras, estoque]);
 
   const lista = aba==="compras"?compras:estoque;
   const setLista = aba==="compras"?setCompras:setEstoque;
@@ -1132,49 +1145,29 @@ function App() {
   const marcasUnicas=[...new Set(lista.map(i=>i.marca).filter(Boolean))];
   const abrirDetalhe=(item)=>{setItemSel(item);setModal("detalhe");};
   // Botão "Pesquisar preços" — busca todos os itens sem preço na lista de compras
-  const sincronizarDrive = async (dadosParaSalvar) => {
-    if (!driveConectado) return;
+  const conectarFirebase = async () => {
+    setFbSincStatus("conectando");
     try {
-      setDriveStatus("sincronizando");
-      await saveToDrive(dadosParaSalvar || { compras, estoque, config });
-      setDriveStatus("ok");
-      setTimeout(() => setDriveStatus(""), 2000);
+      await fbLogin();
+      setFbSincStatus("ok");
+      setTimeout(() => setFbSincStatus(""), 2000);
     } catch(e) {
       console.error(e);
-      setDriveStatus("erro");
+      setFbSincStatus("erro");
+      alert(e.message || "Erro ao conectar. Tente novamente.");
     }
   };
 
-  const conectarDrive = () => {
-    setDriveStatus("conectando");
-    initGapi(() => {
-      getTokenAndRun(async () => {
-        try {
-          const dados = await loadFromDrive();
-          if (dados) {
-            if (dados.compras) setCompras(dados.compras);
-            if (dados.estoque) setEstoque(dados.estoque);
-            if (dados.config) setConfig(c => ({...c, ...dados.config, apiKey: c.apiKey}));
-          }
-          setDriveConectado(true);
-          setDriveStatus("ok");
-          setTimeout(() => setDriveStatus(""), 2000);
-        } catch(e) {
-          console.error(e);
-          setDriveStatus("erro");
-        }
-      });
-    });
+  const desconectarFirebase = async () => {
+    await fbLogout();
+    setFbConectado(false);
+    setFbUser(null);
+    setFbSincStatus("");
   };
 
   // Auto-save to Drive when data changes
-  const driveConectadoRef = React.useRef(driveConectado);
-  driveConectadoRef.current = driveConectado;
-  useEffect(() => {
-    if (!driveConectadoRef.current) return;
-    const t = setTimeout(() => sincronizarDrive({ compras, estoque, config }), 1500);
-    return () => clearTimeout(t);
-  }, [compras, estoque]);
+  const driveConectadoRef = React.useRef(false);
+  driveConectadoRef.current = false;
 
   const handleFoto = async (e) => {
     const file = e.target.files?.[0];
@@ -1414,10 +1407,11 @@ function App() {
           </div>
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
             {buscando&&<div style={{fontSize:"var(--fz-xs)",color:"#fbbf24",animation:"pulse 1s infinite",maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>⟳ {buscandoNome||"buscando…"}</div>}
-            {driveStatus==="conectando"&&<div style={{fontSize:"var(--fz-xs)",color:"#60a5fa",animation:"pulse 1s infinite"}}>Drive...</div>}
-            {driveStatus==="sincronizando"&&<div style={{fontSize:"var(--fz-xs)",color:"#60a5fa",animation:"pulse 1s infinite"}}>↑ Drive</div>}
-            {driveStatus==="ok"&&<div style={{fontSize:"var(--fz-xs)",color:"#4ade80"}}>✓ Drive</div>}
-            {driveStatus==="erro"&&<div style={{fontSize:"var(--fz-xs)",color:"#f87171"}}>✗ Drive</div>}
+            {fbSincStatus==="conectando"&&<div style={{fontSize:"var(--fz-xs)",color:"#60a5fa",animation:"pulse 1s infinite"}}>entrando...</div>}
+            {fbSincStatus==="sincronizando"&&<div style={{fontSize:"var(--fz-xs)",color:"#60a5fa",animation:"pulse 1s infinite"}}>↑ sync</div>}
+            {fbSincStatus==="ok"&&<div style={{fontSize:"var(--fz-xs)",color:"#4ade80"}}>✓ sync</div>}
+            {fbSincStatus==="erro"&&<div style={{fontSize:"var(--fz-xs)",color:"#f87171"}}>✗ sync</div>}
+            {fbConectado&&!fbSincStatus&&<div style={{fontSize:"var(--fz-xs)",color:"#4ade8066"}}>● {fbUser?.email?.split("@")[0]}</div>}
             <button onClick={()=>setModalVoz(true)} style={{
               background:"none",border:"none",cursor:"pointer",padding:"4px",
               display:"flex",alignItems:"center",justifyContent:"center",
@@ -1561,9 +1555,9 @@ function App() {
           onRestore={importarBackup}
           onPrintCompras={()=>printLista(compras,"Lista de Compras",config)}
           onPrintEstoque={()=>printLista(estoque,"Estoque",config)}
-          driveConectado={driveConectado}
-          onConectarDrive={conectarDrive}
-          onSincronizarDrive={()=>sincronizarDrive()}/>
+          driveConectado={fbConectado ? fbUser?.email : null}
+          onConectarFirebase={conectarFirebase}
+          onDesconectarFirebase={desconectarFirebase}/>
       )}
 
       {/* FAB */}
