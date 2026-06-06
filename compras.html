@@ -13,6 +13,7 @@
 <link rel="apple-touch-icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAADACAIAAADdvvtQAAACZklEQVR42u3bwY0CQQxFwQmAMMg/BQLjwo0TEjR8o3G7nnxFsqZLLNuI4yL90OERCCABJIAEkASQABJAAkgCSAAJIAEkASSABJAAkgASQAJIAAkgCSABJIAEkASQABJAAkgCSAAJIAEkASSABJAAEkASQM/ut2u7AQgggAACCCCAAAIIIIAAAggggAACqIaOrQACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAmgmoI4/aPcze4AAAsgABBBAAAEEEEAAGYAMQAABBBBAAAEEkAEIIIAAAggggAAyAAEEEEAAAQQQQAYggAACCCCAAALIAGQAAggggAACCCCADEAAAQQQQAABBJABCCCAAAIIIIAAMgABBBBAAAEEEEAGIGcPEEAAAQQQQAABZAACCCCAAAIIIIAMQAABBBBAAAEEkAEIIIAAAggggAAyAAEEEEAAAQQQQAYgAxBAAAEEEEAAAWQA0s4BJIDe/XG0FUDJj1O2AijwSXz4VgAF/o8buxVAsVuAgVsBFL5DGrUVQOFzKjqtjleCEwGd8wK377UyQK/P4ISA/r8VQGvnlHrJHlsBtPbc46/qvhVACw+97oV9twIIIIAAAmgDPaWndc6tAPIOBBBAAAEEkHsg90AAffDQ3UQDFDgt34UBFDgq38YDVH5aQ7YCqOS0Rm0FUPi0Bm4FUOy0xm4FUOC0hm8F0PcHZiuA1k7OVgAJIAEkASSABJAAkgASQAJIAAkgCSABJIAEkASQABJA2rYHaCIOWCgh+YkAAAAASUVORK5CYII=">
 <link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22Compras+Casa%22%2C%22short_name%22%3A%22Compras%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%230c0c0c%22%2C%22theme_color%22%3A%22%23fbbf24%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAADACAIAAADdvvtQAAACZklEQVR42u3bwY0CQQxFwQmAMMg/BQLjwo0TEjR8o3G7nnxFsqZLLNuI4yL90OERCCABJIAEkASQABJAAkgCSAAJIAEkASSABJAAkgASQAJIAAkgCSABJIAEkASQABJAAkgCSAAJIAEkASSABJAAEkASQM/ut2u7AQgggAACCCCAAAIIIIAAAggggAACqIaOrQACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAmgmoI4/aPcze4AAAsgABBBAAAEEEEAAGYAMQAABBBBAAAEEkAEIIIAAAggggAAyAAEEEEAAAQQQQAYggAACCCCAAALIAGQAAggggAACCCCADEAAAQQQQAABBJABCCCAAAIIIIAAMgABBBBAAAEEEEAGIGcPEEAAAQQQQAABZAACCCCAAAIIIIAMQAABBBBAAAEEkAEIIIAAAggggAAyAAEEEEAAAQQQQAYgAxBAAAEEEEAAAWQA0s4BJIDe/XG0FUDJj1O2AijwSXz4VgAF/o8buxVAsVuAgVsBFL5DGrUVQOFzKjqtjleCEwGd8wK377UyQK/P4ISA/r8VQGvnlHrJHlsBtPbc46/qvhVACw+97oV9twIIIIAAAmgDPaWndc6tAPIOBBBAAAEEkHsg90AAffDQ3UQDFDgt34UBFDgq38YDVH5aQ7YCqOS0Rm0FUPi0Bm4FUOy0xm4FUOC0hm8F0PcHZiuA1k7OVgAJIAEkASSABJAAkgASQAJIAAkgCSABJIAEkASQABJA2rYHaCIOWCgh+YkAAAAASUVORK5CYII=%22%2C%22sizes%22%3A%22192x192%22%2C%22type%22%3A%22image%2Fpng%22%7D%5D%7D">
 <title>Compras Casa</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
@@ -931,36 +932,44 @@ Responda SOMENTE com JSON: {"acao":"string","nome":"string","quantidade":number,
 }
 
 // ── FIREBASE SYNC ──
-const auth = firebase.auth();
 const db = firebase.database();
-const googleProvider = new firebase.auth.GoogleAuthProvider();
 
 const EMAILS_PERMITIDOS = ["cicero.arte@gmail.com", "marciliacampos@gmail.com"];
+const GOOGLE_CLIENT_ID = "695232639555-tf0aktqsgfttmmnag1elhbvs9d3bs3mj.apps.googleusercontent.com";
 
-async function fbLogin() {
-  // Usa redirect no mobile/Safari, popup no desktop
-  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-  if (isMobile) {
-    await auth.signInWithRedirect(googleProvider);
-    return null; // página vai recarregar
-  } else {
-    const result = await auth.signInWithPopup(googleProvider);
-    const email = result.user.email;
-    if (!EMAILS_PERMITIDOS.includes(email)) {
-      await auth.signOut();
-      throw new Error("Acesso não autorizado para " + email);
-    }
-    return result.user;
-  }
+let _fbUser = null;
+
+async function fbLoginComGIS() {
+  return new Promise((resolve, reject) => {
+    const client = google.accounts.oauth2.initTokenClient({
+      client_id: GOOGLE_CLIENT_ID,
+      scope: "email profile",
+      callback: async (response) => {
+        if (response.error) { reject(new Error(response.error)); return; }
+        try {
+          const credential = firebase.auth.GoogleAuthProvider.credential(null, response.access_token);
+          const result = await firebase.auth().signInWithCredential(credential);
+          const email = result.user.email;
+          if (!EMAILS_PERMITIDOS.includes(email)) {
+            await firebase.auth().signOut();
+            reject(new Error("Acesso não autorizado para " + email));
+            return;
+          }
+          resolve(result.user);
+        } catch(e) { reject(e); }
+      },
+    });
+    client.requestAccessToken({ prompt: "select_account" });
+  });
 }
 
 async function fbLogout() {
-  await auth.signOut();
+  await firebase.auth().signOut();
 }
 
 function fbSalvar(dados) {
-  const user = auth.currentUser;
-  if (!user) return;
+  const user = firebase.auth().currentUser;
+  if (!user) return Promise.resolve();
   const configSemApiKey = {...(dados.config||{})};
   delete configSemApiKey.apiKey;
   return db.ref("dados").set({
@@ -1027,16 +1036,16 @@ function App() {
   // Observar estado de autenticação Firebase
   useEffect(()=>{
     // Tratar retorno do redirect (mobile/Safari)
-    auth.getRedirectResult().then(result => {
+    firebase.auth().getRedirectResult().then(result => {
       if (result && result.user) {
         const email = result.user.email;
         if (!EMAILS_PERMITIDOS.includes(email)) {
-          auth.signOut();
+          firebase.auth().signOut();
         }
       }
     }).catch(e => console.error("redirect result:", e));
 
-    const unsub = auth.onAuthStateChanged(user => {
+    const unsub = firebase.auth().onAuthStateChanged(user => {
       if (user && EMAILS_PERMITIDOS.includes(user.email)) {
         setFbUser(user);
         setFbConectado(true);
@@ -1197,7 +1206,7 @@ function App() {
   const conectarFirebase = async () => {
     setFbSincStatus("conectando");
     try {
-      await fbLogin();
+      await fbLoginComGIS();
       setFbSincStatus("ok");
       setTimeout(() => setFbSincStatus(""), 2000);
     } catch(e) {
