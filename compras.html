@@ -564,7 +564,7 @@ function DetalheModal({item,onClose,onUpdate,config}) {
 }
 
 // ── CONFIG PANE ──
-function ConfigPane({config,setConfig,onSincChange,onClearCompras,onClearEstoque,onBackup,onRestore,onPrintCompras,onPrintEstoque,driveConectado,onConectarFirebase,onDesconectarFirebase}) {
+function ConfigPane({config,setConfig,onSincChange,onClearCompras,onClearEstoque,onBackup,onRestore,onPrintCompras,onPrintEstoque,driveConectado,onConectarFirebase,onDesconectarFirebase,onCarregarDados}) {
   const upd = (k,v) => setConfig(c=>({...c,[k]:v}));
   const [conf,setConf] = useState(null);
   return (
@@ -690,9 +690,14 @@ function ConfigPane({config,setConfig,onSincChange,onClearCompras,onClearEstoque
               Entrar com Google
             </button>
           ) : (
-            <button onClick={onDesconectarFirebase} style={{...btnSec,color:"#f87171",borderColor:"#f8717144"}}>
-              Sair da conta
-            </button>
+            <>
+              <button onClick={onCarregarDados} style={{...btnSec,color:"#4ade80",borderColor:"#4ade8044",marginBottom:8}}>
+                Carregar dados agora
+              </button>
+              <button onClick={onDesconectarFirebase} style={{...btnSec,color:"#f87171",borderColor:"#f8717144"}}>
+                Sair da conta
+              </button>
+            </>
           )}
         </div>
       </Section>
@@ -933,13 +938,20 @@ const googleProvider = new firebase.auth.GoogleAuthProvider();
 const EMAILS_PERMITIDOS = ["cicero.arte@gmail.com", "marciliacampos@gmail.com"];
 
 async function fbLogin() {
-  const result = await auth.signInWithPopup(googleProvider);
-  const email = result.user.email;
-  if (!EMAILS_PERMITIDOS.includes(email)) {
-    await auth.signOut();
-    throw new Error("Acesso não autorizado para " + email);
+  // Usa redirect no mobile/Safari, popup no desktop
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  if (isMobile) {
+    await auth.signInWithRedirect(googleProvider);
+    return null; // página vai recarregar
+  } else {
+    const result = await auth.signInWithPopup(googleProvider);
+    const email = result.user.email;
+    if (!EMAILS_PERMITIDOS.includes(email)) {
+      await auth.signOut();
+      throw new Error("Acesso não autorizado para " + email);
+    }
+    return result.user;
   }
-  return result.user;
 }
 
 async function fbLogout() {
@@ -1014,6 +1026,16 @@ function App() {
 
   // Observar estado de autenticação Firebase
   useEffect(()=>{
+    // Tratar retorno do redirect (mobile/Safari)
+    auth.getRedirectResult().then(result => {
+      if (result && result.user) {
+        const email = result.user.email;
+        if (!EMAILS_PERMITIDOS.includes(email)) {
+          auth.signOut();
+        }
+      }
+    }).catch(e => console.error("redirect result:", e));
+
     const unsub = auth.onAuthStateChanged(user => {
       if (user && EMAILS_PERMITIDOS.includes(user.email)) {
         setFbUser(user);
@@ -1156,6 +1178,22 @@ function App() {
   const marcasUnicas=[...new Set(lista.map(i=>i.marca).filter(Boolean))];
   const abrirDetalhe=(item)=>{setItemSel(item);setModal("detalhe");};
   // Botão "Pesquisar preços" — busca todos os itens sem preço na lista de compras
+  const carregarDados = () => {
+    setFbSincStatus("sincronizando");
+    db.ref("dados").once("value").then(snap => {
+      const val = snap.val();
+      if (val) {
+        if (val.compras) setCompras(val.compras);
+        if (val.estoque) setEstoque(val.estoque);
+        if (val.config) setConfig(c => ({...c, ...val.config, apiKey: c.apiKey}));
+        setFbSincStatus("ok");
+        setTimeout(() => setFbSincStatus(""), 2000);
+      } else {
+        setFbSincStatus("erro");
+      }
+    }).catch(() => setFbSincStatus("erro"));
+  };
+
   const conectarFirebase = async () => {
     setFbSincStatus("conectando");
     try {
@@ -1568,7 +1606,8 @@ function App() {
           onPrintEstoque={()=>printLista(estoque,"Estoque",config)}
           driveConectado={fbConectado ? fbUser?.email : null}
           onConectarFirebase={conectarFirebase}
-          onDesconectarFirebase={desconectarFirebase}/>
+          onDesconectarFirebase={desconectarFirebase}
+          onCarregarDados={carregarDados}/>
       )}
 
       {/* FAB */}
